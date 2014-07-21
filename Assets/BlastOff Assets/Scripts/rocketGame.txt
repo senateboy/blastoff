@@ -1,0 +1,4337 @@
+
+//	rocketGame.JS
+//	ENGINE using HTML5 and CANVAS OBJECT
+//	INFO: Game Engine is a NODE GRAPH by design. BEHAVIOR OBJECTS are added to each Node for functionality.
+//	DEPENDANTS: Jquery, GreenSock's "TweenLite", ...
+//
+// 		TO DO: 
+// 			CONVERT Level to CHECKPOINT OBJECT 
+// 			By moving its level.advance() to a new Node object called PLAYER.
+// 			DONE: Start by REMOVING the need for Level.updateActiveStage() 			
+//
+// 		DONE:
+//			ADD FIND YOUNGEST SISTER to NODE
+//			added robust a nodeFilter()
+//
+//		DONE:
+//			REPLACE "TYPE" with "type" and "VALUE" with "value"
+// 			this was getting really annoyoing and inconsitant other property names
+//		
+// 		TO DO:
+//			ADD TIMERS TO CHECKPOINTS
+// 			Allows us to check fastest combos and stats
+//			Allows us to not need a special one for finishing the level.
+//	
+// 		TO DO:
+// 			CREATE INPUT MODES object
+//			Allows inputs to change when in PAUSE SCREEN or START SCREEN
+//
+//		TO DO:
+//			CREATE BUTTON Behaviors that have an 'action()'.
+//			example. asButton();  
+//			THis will require SELECTION type behaviors as well. or button.isSelected. in a FIELD. 
+//			Maybe need Field Behaviors ? to hold buttons?
+//
+//		TO DO:
+//			CONVERT LEVEL to CHECKPOINT
+//			1.Level must keep it's own Score and Stats.
+//			2.Figure out how to have  - only the 'active' level taking player input. 
+//						(activeLevel would be in the asGame() object behavior)
+//						rememering that START-screen, PAUSE-screen, HIGH-SCORE-screen, etc...
+//						are going to have to handle different INPUT MODES.
+//			3. We may not need PLAYER OBJECT since it could be handled in the Main levelNode/checkpoint.
+//
+//		TO DO: 
+//			kill ANIM manager - have transforms do their OWN ANIMATION.
+//			ALSO, instead of keeping a list of Objects that have current transitions -- keep a list of properties.
+//			That way i can animate an object.propert_A while in the middle of another animation of object.property_B
+//			As it is right now, this is not possible since, it adds transitions by Object. ONE transition at a time ONLY 
+//
+//		TO DO:
+//			CONTEMPLATE isActive: with isStarted, isComplete
+//			isStarted = FALSE, then TRUE
+//			isComplete = FALSE, then TRUE
+//			isActive = FALSE, then TRUE, then FALSE again.
+//			 -- CAN I USE THIS?  Multiple SCREENS would be able to take INPUT at the same time.
+//			 
+//		DONE:
+//			Change scenegraph structure - so that a node of vertain "asBehavior" creates it's children nodes.
+//			This means: Node Class needs to be able to make nodes, and add them to it's childList "Node.children"
+//			
+//		DONE:
+//			This also means: I need a visual way of debugging SceneGrpah stucture -- CREATE: Node.printNodes(); in a way i can see the structure
+//		
+//		TO DO:
+//			Add filter arguments to Node.printNodes
+//			
+//		TO DO:
+//			Kill AnimationManage
+//			add asBehavior object.animation.addTransition()    methods.
+//			
+//		TO DO:
+//			Add asBehavior : object.transform.posX   object methods
+//
+//		TO DO: 
+//			Make Behaviors a Class: they all , have onLoad, onFirstUpdate, 
+//
+//		TO DO: 
+//			Separate asBehaviors from actual Nodes.
+//			Ex: Behaviors should not create new update functions that you register. 
+//
+//		DONE:
+//			FINISH these functions out. I'm going to need them.
+//			self.getParent = function(filter_behavior, filter_index_toReturn, filter_stringName){
+//			self.getChild = function(filter_behavior, filter_index_toReturn, filer_stringName){
+//
+//		TO DO:
+//			Swap "sibling" = "sib" 		OR 		"sibling"
+//			Swap "siblings" = "sibs"    			"siblings"
+//
+//		TO DO: 
+//			DOUBL CHECK FIX other 'getters's filters -- similar to getDecendents. 
+//			the way i pass teh arguments could be much cleaner and
+//			 more comprehensive with the number of args past. 
+//
+//		DONE:
+//			DONE:Was working on getting Input Swapping working. 
+//			DONE:Make the current objects i made in the test area a START SCREEN.
+//			DONE: Need an easy way to swap between SCREENs -- which is what holds the INPUT SWAPPING
+//
+//		TO DO:
+//			Add Particle engine -- renders paricles on BG layer node, but at current player height.
+//
+//		TO DO: 
+//			Create "GO" graphics -- after count down, so we know when to start playing. Could be blast of engine.
+//
+//		TO DO:
+//			Code "addStage, addCombo, addMove" functions to "asLevel" for faster lvl creation.
+//
+//		TO DO:
+//			forceField gravity and speeds, should be results of universal Time Ticks -- not just adjusted every update cycle.
+//			This means i need a global time since last tick variable.
+//		
+//
+
+
+
+
+
+///-----------------------------------------------------------------------------
+/*
+// This game depends on the canvas element
+    if(!('getContext' in document.createElement('canvas'))){
+        alert('Sorry, it looks like your browser does not support canvas!');
+        return false;
+    }
+*/
+
+
+
+
+//SET GLOBAL SCOPE VARIABLE
+//var global = window;
+document.ontouchmove = function(event){
+    event.preventDefault();
+}
+
+//TEST FULLSCREEN in IPHONE MOBILE SAFARI
+$(function(){
+  if ( ("standalone" in window.navigator) && !window.navigator.standalone ) {
+    console.log('running mobile safari fullscreen');
+  }
+});
+
+
+//Random Helper
+randomMinMax = function(min, max){
+	var num = Math.random() * (max - min) + min;
+	return num;
+}
+
+//START ROCKET GAME
+document.onLoad = (function(global){
+
+
+	//GET Drawing CONTEXTS
+	var frame = $("#div1")[0];
+	var c = $("#canvasFG")[0];
+	var ctx = c.getContext("2d");
+
+	var VIEW_X;
+	var VIEW_Y;
+	var VIEW_TOP;
+	var VIEW_BOTTOM;
+	var VIEW_RIGHT;
+	var VIEW_LEFT;
+
+
+	var COMBO_SIZE;
+	var MOVE_SIZE;
+	var COUNTDOWN_SIZE;
+	var MENU_ITEM_SIZE_X;
+	var MENU_ITEM_SIZE_Y;
+
+
+
+	setCanvasSize = function(){
+		//VIEW_X = $(window).width();
+		//VIEW_Y = $(window).height();
+		VIEW_X = 320; // IPhone 5 Retina
+		VIEW_Y = 568; // IPhone 5 Retina
+		VIEW_TOP = VIEW_Y * -.5;
+		VIEW_BOTTOM = VIEW_Y * .5;
+		VIEW_RIGHT = VIEW_X * .5;
+		VIEW_LEFT = VIEW_X * -.5;
+
+		COMBO_SIZE = VIEW_X / 6;
+		MOVE_SIZE = VIEW_X * .1;
+		COUNTDOWN_SIZE = VIEW_X * .25;
+		MENU_ITEM_SIZE_X = VIEW_X * .75;
+		MENU_ITEM_SIZE_Y = MENU_ITEM_SIZE_X * .3;
+
+		//FIX canvas size: Style is hardware scalable
+		c.width = VIEW_X;
+		//c.style.width = window.innerWidth + 'px'; //hardware scaling
+		c.height = VIEW_Y;
+		//c.style.height = window.innerHeight + 'px'; //hardware scaling
+
+
+
+		//ADJUST ORIGIN
+		ctx.translate(VIEW_X/2, VIEW_Y/2);
+		
+	};
+	setCanvasSize();
+
+
+	//RESIZING function.
+	global.onresize = function(){
+		console.log("resizing gg viewport");
+		setCanvasSize();
+	}
+	
+
+	//ACTIVE_LEVEL = {};
+
+
+
+
+
+	//---- ENUMS -----------------//
+
+	CHECKPOINT = {
+		GAME : {value: 0, name: "Game"},
+		LEVEL : {value: 0, name: "Level"},
+		STAGE : {value: 1, name: "Stage"},
+		COMBO : {value: 2, name: "Combo"},
+		MOVE : {value: 3, name: "Move",
+
+					UP : {value: 0, name: "Move Up"},
+					RIGHT : {value: 1, name: "Move Right"},
+					DOWN : {value: 2, name: "Move Down"},
+					LEFT : {value: 3, name: "Move Left"},
+				},
+	}
+
+	SPRITE = {};
+	TRANSFORM = {};
+
+	ALIGN = {
+		CENTER : {value: 0, name: "Center"},
+		RIGHT : {value: 1, name: "RIGHT"},
+		LEFT : {value: 2, name: "LEFT"},
+	};
+
+
+
+
+	//---- CLASSES  -------------//
+
+	XYPoint = function( x, y ){
+		var self = this;
+
+		self.x = 0;
+		self.y = 0;
+
+		if(x){ self.x = x }
+
+		if(y){ self.y = y }
+
+		return 1;
+	};
+
+	Flag = function(c_initValue){
+		var self = this;
+		
+		self._count = 0;
+		self.value = false;
+		self.isFirstTime = false;
+
+
+		
+		//init value
+		if(c_initValue){
+			self.value = c_initValue;
+		}
+
+
+		self.setValue = function(c_value){
+			
+			if(arguments.length){
+				
+				self._count++;
+				
+				if(self._count == 1){
+					self.isFirstTime = true;
+					self.count++;
+
+				}else{
+					self.isFirstTime = false;
+					self._count = undefined;
+				}
+
+				self.value = c_value;
+
+
+			}else{
+				console.warn("Flag:setValue: No VALUE to set");
+			}
+
+			return c_value;
+		}
+
+		self.reset = function(r_initValue){
+
+			if(r_initValue){
+				self.value = r_initValue;
+			}
+			self._count = 0;
+			self.isFirstTime = false;
+		}
+	}
+
+	Node = function(c_name){
+	//INFO: Base Class for All scenegraph elements.
+		
+
+		var self = this;
+		
+		
+		self.name = "";
+		self.type;
+		self.visibility = true; //to stop Node.Draw()
+		self.isPaused = false; //To stop Node.update()
+		self.isUpdated = new Flag(false);
+
+
+		self.parent;
+		self.children = [];
+		
+		self.firstUpdateCommandList = [];
+		self.updateCommandList = [];
+		self.drawCommandList = [];
+
+
+		//ARGUMENTS
+		if(c_name){
+			self.name = c_name;
+		}
+
+		
+		self.onFirstUpdate = function(){
+			//console.log("Node:onFirstUpdate: called by \"%s\" ", self.name);
+		}
+
+		self.listChildren = function(){
+			var msg = self.name + "'s children are: ";
+			for(var i = 0; i < self.children.length; i++){
+				msg += self.children[i].name + ", ";
+			}
+			console.log(msg);
+		}
+		
+		self.removeChild = function(node){
+			var id = self.children.indexOf(node);
+			self.children.splice(id,1);						//REMOVE THE CHILD FROM CHILDREN ARRAY given the index
+		}
+		
+		self.setParent = function(node){
+			// console.log("Node:SetParent: " + self.name +" to " + node.name);
+			
+			if(self.parent){								//IF I ALREADY HAVE PRE-EXISTING PARENT…
+				
+				var isChild = self.children.indexOf(node);	//IS MY PARENT-TO-BE MY CHILD?
+				if(isChild >= 0){									  
+					
+					self.removeChild(node); 
+					node.parent = self.parent; 				//PARENT MY CHILD TO MY EXISTING PARENT(his grandfather)
+					node.parent.children.push(node);		//UPDATE CHILD's NEW PARENT LIST -- which is my current parents children list.
+				}
+				
+				self.parent.removeChild(self);				//REMOVE ME FROM MY PRE-EXISTING PARENT's LIST OF CHILDREN
+			}
+			
+			self.parent = node;								//CHANGE MY PARENT
+			node.children.push(self);						//UPDATE MY NEW PARENT'S CHILD LIST  
+		}
+
+
+		self.getUniqueName = function(name){
+			var uniqueName = "";
+			var parent = self.getOldestParent();
+			var existingNodes = [];
+
+			//force String argument
+			name = name.toString();
+			
+			//Check for Parent and grab allDecendents
+			if(parent){
+				existingNodes = parent.getDecendents("name", name);
+			}else{
+				existingNodes = self.getDecendents("name", name);
+			}
+
+			//If nodes with name already exists.
+			if(existingNodes.length){
+				
+				var num = 0;
+				
+				//Check for numberSuffix
+				var numSuffix = name.match(/(\d+$)/g);
+				//console.log("numSuffix is %s", numSuffix)
+				if(numSuffix){//Has numbers
+					var sliceIndex = name.search(numSuffix[0]);
+					var prefix = name.slice(0,sliceIndex);
+
+					//console.log("sliceIndex is %s, and prefix is %s", sliceIndex, prefix);
+
+					num = Number(numSuffix[0]);
+					num += 1;
+					
+					uniqueName = self.getUniqueName(prefix + num);
+
+				}else{//has no numbers
+					num += 1;
+					uniqueName = self.getUniqueName(name + num);
+
+				}
+
+			}else{
+				uniqueName = name;
+			}
+
+			
+
+			return uniqueName;
+		}
+
+		self.select = function(name){
+			var nodes=[];
+			var parent = self.getParent();
+
+			if(typeof name == "string"){
+				if(parent){
+					nodes = parent.getDecendents("name", name)
+				}else{
+					nodes = self.getDecendents("name", name);
+				}
+
+
+			}else{
+				console.warn("select: Expecting type String");
+			}
+
+		
+			return nodes;
+		}
+
+		self.createNode = function(c_name){
+			var node = new Node;
+
+			if(c_name){
+				node.name = c_name;
+				
+			}else{
+				node.name = self.getUniqueName("node");
+				//console.log("Node.createNode: MUST specify NAME");
+			}
+
+			node.setParent(self);
+
+			return node;
+		}
+
+		self.deleteNode = function(node){
+			if(!node){
+				console.warn("Node.deleteNode: Expecting argument type 'Node'.");
+				return 0;
+			}else{
+				if(node.parent){
+					node.parent.removeChild(node);
+				}
+
+				delete node;
+				return 1;
+			}
+		}
+		
+		self.filterNodes = function(array_of_nodes, filter_property, filter_value, filter_exception_nodeArray ){
+		//RETURNS an ARRAY of NODES
+			var nodeList = [];
+
+			//DO WE HAVE --  ARRAY of nodes to filter?
+			if(array_of_nodes.hasOwnProperty("length")){
+				nodeList = array_of_nodes;
+
+			}else{
+				console.log("Node:filterNodes: ARGUMENT:array_of_nodes must be array");
+				return nodeList
+			}
+			
+
+			var matchException = function(matchNode){
+				//Do we have the Argument
+				if(filter_exception_nodeArray != undefined){
+					
+					//Loop through Exception argument array and see if it matches the matchNode
+					for(var j = 0; j < filter_exception_nodeArray.length; j++){
+						if(filter_exception_nodeArray[j] == matchNode){
+							return true;
+						}
+					}
+
+				}else{
+					return false;
+				}
+			}
+
+			//FILTER (for) PROPERTY
+			if(filter_property != undefined){
+				
+				if(typeof filter_property != "string"){
+					console.log("Node:filterNodes: ARGUMENT:filter_property must be string");
+					return;
+				}
+				
+				var saveList = [];
+				for(var i = 0; i < nodeList.length; i++){
+					//Exceptions
+					var isException = matchException(nodeList[i]);
+
+					//SAVE if Prop EXISTS
+					if(nodeList[i].hasOwnProperty(filter_property) || isException){
+						saveList.push(nodeList[i]);
+						
+					}
+				}
+
+				nodeList = saveList;	
+			}
+
+
+			//FILTER (for) VALUE
+			if(filter_value != undefined){
+				//console.log("Node:filterNodes:  filtering for \'value\'");
+				var saveList = [];
+				for(var i = 0; i < nodeList.length; i++){
+
+					//Exceptions
+					var isException = matchException(nodeList[i]);
+
+					//SAVE if prop == vaue
+					if((nodeList[i][filter_property] == filter_value) || isException){
+						saveList.push(nodeList[i]);
+					}
+				}
+
+				nodeList = saveList;
+			}
+
+			return nodeList;
+		}
+
+		//NOT WORKING!!!!!! -- a filter problem
+		
+		self.getLeafNodes = function(filter_property, filter_value){
+
+			var nodeList = [];
+
+			if(self.children.length){
+				// Append Children's leafNodes to the list
+				for(var i = 0; i < self.children.length; i++){
+					nodeList = nodeList.concat(self.children[i].getLeafNodes(filter_property, filter_value));
+				}
+
+			}else{
+				//I'm a leaf node
+				nodeList.push(self);
+			}
+			
+			//FILTER Results
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+
+			return nodeList;
+		}
+		
+		self.getDecendents = function(filter_property, filter_value){
+			var nodeList = [];
+			
+			nodeList.push(self);
+
+
+			if(self.children.length){
+				// Append Children's ofValue to the list
+				for(var i = 0; i < self.children.length; i++){
+					
+					nodeList = nodeList.concat(self.children[i].getDecendents(filter_property, filter_value));
+				}
+			}
+
+			//Filter results
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+
+			return nodeList;
+		}
+
+		self.getSisterNodes = function(filter_property, filter_value){ //optional type to look for.
+			var nodeList = [];
+			var myIndex;
+
+			if(self.parent.children.length > 1){
+				
+				//COPY Parents CHILDREN
+				nodeList = nodeList.concat(self.parent.children); //NEVER DO THIS: nodeList = self.parent.children; This will DESTROY the original array.
+
+				//REMOVE me from the list
+				myIndex = nodeList.indexOf(self);
+				nodeList.splice(myIndex,1);
+
+				
+				//Filter results
+				nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+			
+
+
+			}else{
+				console.log("Node:getSisterNodes: Node has NO sibling nodes");	
+			}
+
+			return nodeList;
+		}
+		
+		self.getYoungerSister = function(filter_property, filter_value){
+			var nodeList = [];
+			var myIndex;
+			var youngerSisterIndex;
+			var youngerSisterNode;
+
+			//COPY parents children
+			nodeList = nodeList.concat(self.parent.children);
+			
+			//FILTER -- but keep Me in the list	
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value, [self] );
+
+			//console.log(nodeList);
+		
+			myIndex = nodeList.indexOf(self);
+			youngerSisterIndex = myIndex + 1;
+			
+			if(nodeList[youngerSisterIndex]){
+				youngerSisterNode = nodeList[youngerSisterIndex];
+			}else{
+				//console.warn("Node:getYoungerSister: No Younger Sister Node");
+				youngerSisterNode = undefined;
+			}
+
+			//remove self from the list.
+
+
+			return youngerSisterNode;
+		}
+
+		self.getOlderSister = function(filter_property, filter_value){
+			var nodeList = [];
+			var myIndex;
+			var olderSisterIndex;
+			var olderSisterNode;
+
+			//COPY parents children
+			nodeList = nodeList.concat(self.parent.children);
+			
+			//FILTER -- but keep Me in the list
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value, [self] );
+			
+
+			myIndex = nodeList.indexOf(self);
+			olderSisterIndex = myIndex - 1; //older
+			
+			if(nodeList[olderSisterIndex]){
+				olderSisterNode = nodeList[olderSisterIndex];
+			}else{
+				//console.warn("Node:getYoungerSister: No Younger Sister Node");
+				olderSisterNode = undefined;
+			}
+
+			return olderSisterNode;
+		}
+
+		self.getGeneration = function(){
+			var numGen = 1;
+
+			if(self.parent){
+				numGen += self.parent.getGeneration();
+				
+			}
+
+			return numGen;
+		}
+
+		self.getAllParents = function(filter_property, filter_value){
+			var nodeList = [];
+
+			if(self.parent){
+					//looks at parent and add to the list.
+					nodeList.push(self.parent);
+					nodeList = nodeList.concat(self.parent.getAllParents());
+		
+			}
+
+			//FILTER
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+
+			return nodeList;
+		}	
+
+		self.getOldestParent = function(filter_property, filter_value){
+			var node;
+			var nodeList = [];
+
+
+			nodeList = self.getAllParents();
+
+
+			//FILTER
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+
+			if(nodeList.length){
+				node = nodeList[nodeList.length -1];
+			}
+
+			return node;
+		}
+
+		self.getParent = function(filter_property, filter_value){ //Filter allows to find the next parent that matches the filter.
+			var node;
+		
+			if(self.parent){
+				node = self.filterNodes([self.parent],filter_property,filter_value)[0];
+
+				if(node == undefined){
+					node = self.parent.getParent(filter_property, filter_value);
+				}
+			}
+			
+			return node;
+			
+		}
+
+		self.getChildren = function(filter_property, filter_value){
+			var nodeList = [];
+
+			nodeList = self.children;
+
+			nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+
+			return nodeList;
+		}
+
+		self.printNodes = function(){
+
+			var nodeString = "";
+			var tab = "     "; //String.fromCharCode(195);
+			var newLine = "\n";
+
+		
+			nodeString +=  self.name;
+
+			if(self.children.length){
+				//APPEND CHILDREN
+				for(var i = 0; i < self.children.length; i++){
+
+					nodeString += newLine;
+
+					//COUNT TABS and APPEND
+					for(var j = 0; j < self.getGeneration(); j++){
+						nodeString += tab;
+					}
+
+					nodeString += self.children[i].printNodes();
+				}	
+			}
+
+			//FILTER FOR
+			//if(filter_property){
+				//nodeList = self.filterNodes(nodeList, filter_property, filter_value);
+			//}
+
+			return nodeString;
+		}
+		
+		self.updateCommands = function(){
+			for(var i = 0; i < self.updateCommandList.length; i++){
+				self.updateCommandList[i]();
+			}
+		}
+
+		self.updateChildren = function(){
+			for (var i = 0; i < self.children.length; i++){
+				self.children[i].update();
+			}
+		}
+		
+		self.drawChildren = function(){
+			for (var i = 0; i < self.children.length; i++){
+				self.children[i].draw();
+			}
+		}
+		
+		self.update = function(){
+			//console.log("updating: " + self.name)
+			if(!self.isPaused){
+
+
+				//FirstUpdate FlAG
+				self.isUpdated.setValue(true);
+				if(self.isUpdated.isFirstTime){
+					//console.log("updating node first time: %s", self.name);
+					self.onFirstUpdate();
+				}
+
+				self.updateCommands();
+				self.updateChildren();
+			}
+		}
+		
+		self.draw = function(){
+			if(self.visibility){
+					ctx.save();
+					
+					for(var i = 0; i < self.drawCommandList.length; i++){
+						self.drawCommandList[i]();
+					}
+
+					self.drawChildren();
+					ctx.restore();
+			}
+		
+		}
+
+		return self;
+	}//END Node
+
+
+
+	Transition = function(node, property, value, speed, easing, callback){
+	//INFO: INTERPOLATES between different values of a property.
+
+		var self = this;
+
+		self.node = node;
+		self.property = property;
+
+		
+		self.isDone = false;
+		self.isPaused = false;
+		self.isFirstUpdate = true;
+
+		this.startValue;// = global[node][property];
+		this.startTime; //= (new Date).getTime();
+		this.endTime; //= this.startTime + speed;
+		this.interpTime;// = 0;
+
+
+		this.update = function(){	
+
+
+			if(self.isFirstUpdate){
+				//SET current properties valueS. 
+				this.startValue = this.startValue = node[property];   //** "global"[node] not working here.
+				this.startTime = (new Date).getTime();
+				this.endTime = this.startTime + speed;
+				this.interpTime = 0;
+
+				//SET flags.
+				self.isFirstUpdate = false;
+			}
+
+			if(self.isDone){
+
+				self.parent.removeChild(self); //pretty ghetto way to free memory here  -- parented  only to auto update from scenegraph.
+				//delete self;
+
+				//RUN CALLBACK FUNCTION;
+				console.log(callback);
+				if(callback){
+					console.log("CALLBACK");
+					callback();
+				};
+
+				
+			}else{
+				var curTime = (new Date).getTime();
+				
+				//FIND TIME (1 unit in length)
+				self.interpTime = (curTime - self.startTime) / (self.endTime - self.startTime);
+
+				//console.log("interpTime = " + self.interpTime);
+
+				if(self.interpTime < 1){
+					
+					var t; 
+
+					if (easing == "LINEAR"){
+						//LINEAR INTERPOLATION
+						var t = self.interpTime;
+					}else if (easing == "SMOOTH"){
+						
+						//SMOOTH-STEP INTERPOLATION
+						t = Math.pow(self.interpTime,2) * (3- (2 * self.interpTime ));
+
+					}else if (easing == "ACCEL"){
+						
+						//ACCELERATION INTERPOLATION
+						t = Math.pow(self.interpTime,2);
+					
+					}else if (easing == "DECEL"){
+						
+						//DECELERATION INTERPOLATION
+						
+						t = 1 - Math.pow((1 - self.interpTime),2);
+					}else {
+						
+						//DEFAULT LINEAR
+						t = self.interpTime;
+					}
+
+					//INTERPOLATE value and APPLY
+					node[property] = self.startValue + ((t) * (value - self.startValue));
+
+				}else{
+
+					node[property] = value;
+					
+					this.isDone = true;
+					
+					//RUN CALLBACK FUNCTION;
+					if(callback){
+						callback();
+					};
+				}
+			}	
+		}
+	};//END Transitions
+
+
+
+	//ADDS OBJECTS that consists of animated NODES, that hold TRANSITIONS
+	//CREATE ANIMATED TRANSITION
+	//PREVENTS MULTIPLE TRANSITIONS BEING PLAYED AT ONCE FROM SAME objec.prop.
+	AnimationManager = function(){
+			self = this;
+
+			self.nodeList = []; //LIST of animObj's
+
+			//HELPER object for managing NODE's and their TRANSITIONS
+			//TRANSITIONS ARE COLLECTED BY OBJECT -- EACH OBJECT HAS A LIST OF TRANSITIONS
+			// AnimObject 2D-Array Structure
+			// AnimObject[Objectnames][Transitions]
+			//arguments: transition object, INTERUPT bool -- which tell it to kill all other transitions and not stack it to the list.
+			self.AnimObject = function(c_transition, INTERUPT){  
+					var self = this;
+					
+					//hold animations	
+					self.node = c_transition.node;
+					self.transitions = []; // list of ANIMATION-OBJECTS
+					self.isEmpty = false;
+					
+					
+
+					self.addTransition = function(c_transition, INTERUPT){
+						
+						if(INTERUPT == true){
+							for(i=0; i<self.transitions.length; i++){
+			
+								self.transitions = [];  //EMPTY the array of TRANSITIONS
+							}
+						}
+
+						self.transitions.push(c_transition);
+					};
+
+					//Add c_transition while CONSTUCTING
+					self.addTransition(c_transition, INTERUPT);
+
+
+					self.update = function(){
+						//UPDATE the transitions belonging to this AnimHelper
+						//CHECK IF transitions exist OTHERWISE, UPDATE the the first transiion element 
+						
+						for(var i = 0; i < self.transitions.length; i++){
+							//console.log("      --- property" + i + " is " + self.transitions[i].property);
+						}
+
+						//CHECK IF transition EXISTS.
+						if(self.transitions.length > 0){
+
+
+							//GET new TRANSITION
+							var t = self.transitions[0]
+
+							//CHECK if transition is DONE.
+							if(t.isDone){
+
+								//REMOVE transition from array
+								self.transitions.shift(0); //delete self.transitions.shift(0);
+								
+
+							}else{
+
+								//UPDATE the TRANSITION
+								t.update();
+							}
+
+							
+
+						}else{
+							//NO transitions EXIST
+							self.isEmpty = true;
+						}
+					}//END update()
+					
+							
+			}
+
+			
+			///// THIS IS NOT ADDING THE TRANSITION CORRENTLY???
+			self.addAnim = function(c_transition, INTERUPT){ //perhaps this make the Transitions objects!
+				
+				var node = c_transition.node; // this gives us node name -- which needs to refer to a animObj
+				var a;
+				
+				//CHECK IF animObject EXISTS, if so, 
+				if(this.nodeList.length > 0){
+
+					//SEARCH NodeList for AnimObject WHERE AnimNode.Node = c_transition.node;
+					for(var i = 0; i < this.nodeList.length; i++){
+						if(this.nodeList[i].node == node){
+
+							a = this.nodeList[i];
+						}
+					}
+				}
+
+				//CHECK IF animObject EXISTS
+				if(a){
+					//ADD transition to a's list
+					a.addTransition(c_transition, INTERUPT);
+
+				}else{
+					//CREATE animObj
+					a = new this.AnimObject(c_transition, INTERUPT);
+					this.nodeList.push(a);
+
+				}
+
+			};
+
+			
+			self.update = function(){
+				//UPDATE each element of the animNodesList;
+				//console.log("animationManager.update: num of animObjs is" + this.nodeList.length );
+				//console.log("num anmObjs is: "+ this.nodeList.length);
+				
+
+				for(var i=0; i < this.nodeList.length; i++){
+						
+						if(this.nodeList[i].isEmpty){			//IF animNode is EMPTY,
+							this.nodeList.splice(i,1);			//then REMOVE it.
+						}else{									//ElSE, UPDATE it.
+							this.nodeList[i].update();
+						}
+						
+				}
+			};
+	};//END AnimationManager
+
+
+	AssetManager = {
+		self : this,
+		images : [],
+		sounds : [],
+
+		addImage : function(c_src, width, height){
+
+			//check args
+			if(!arguments.length){
+				console.warn("AssetManager.addImage: No image path specified");
+				return undefined;
+
+			}
+
+			var img;
+			var index;
+
+			// Check to see if image already exists.. if so, return that instead.
+			index = this.images.indexOf(c_src);
+			
+			if(index >= 0){
+				img = this.images[index];
+
+			}else{
+
+				index = (this.images.push(new global.Image) -1);
+				img = this.images[index];
+				img.src = c_src;
+				if(width && height){
+					img.width = width;
+					img.height = height;
+				}
+			}
+
+			//console.log("ASSET MANGER: width is: %s", img.width)
+
+			return img;
+
+		},	
+	};
+
+
+
+	//Class used by InputFields
+	InputCommandList = function(){
+		var self = this;
+
+		self.up = function(){
+		//UP commands here
+		}
+
+		self.right = function(){
+		//RIGHT commands here
+		}
+
+		self.down = function(){
+		//DOWN commands here
+		}
+
+		self.left = function(){
+		//LEFT commands here
+		}
+
+		self.spacebar = function(){
+		//SPACEBAR commands here.
+		}
+	}
+
+
+	//--------------------------------------------------------------------
+	//-------------------- GAME SPECIFIC OBJECTS -------------------------
+	//--------------------------------------------------------------------
+
+
+
+	EventManager = {
+		self: this,
+
+		eventCue : [],
+		curEventIndex : 0,
+
+		register : function(e){
+			this.eventCue.push(e);
+
+		},
+
+		update : function(){
+			
+			var i = this.curEventIndex;
+			for(i; i < this.eventCue.length; i++){
+				
+				e = this.eventCue[i];
+				console.log("EVENT: %s", e.name);
+				
+				if(typeof e.action == "function"){
+					e.action();
+				}
+			}
+			this.curEventIndex = i;
+		}
+	}
+
+	//ENUM for EVENTS
+	EVENT = {
+
+
+		PLAYER_MOVED: {value: 0, name: "Player Moved", action:null},
+		PLAYER_MOVED_UP: {value: 0, name: "Player Moved Up", action:null},
+		PLAYER_MOVED_RIGHT: {value: 0, name: "Player Moved Right", action:null},
+		PLAYER_MOVED_DOWN: {value: 0, name: "Player Moved Down", action:null},
+		PLAYER_MOVED_LEFT: {value: 0, name: "Player Moved Left", action:null},
+		PLAYER_PAUSE: {value: 0, name: "Player Paused", action:null},
+
+		CORRECT_MOVE: {value: 0, name: "Player Moved Correct", action:null},
+		WRONG_MOVE: {value: 0, name: "Player Moved Wrong", action:null},
+
+		MOVES_COMPLETE: {value: 0, name: "Moves Complete", action:null},
+		COMBO_COMPLETE: {value: 0, name: "Combo Complete", action:null},
+		STAGE_COMPLETE: {value: 0, name: "Stage Complete", action:null},
+		LEVEL_COMPLETE: {value: 0, name: "Level Complete", action:null},
+		LEVEL_START: {value: 0, name: "Level Start", action:null},
+
+		
+		PLAYER_DEATH: {value: 0, name: "Player has Died", action:null},
+	}
+	//SET ACTIONS FOR EVENTS
+		EVENT.PLAYER_MOVED_UP.action = function(){
+			//ACTIVE_LEVEL.advance(CHECKPOINT.MOVE.UP);
+		}
+
+		EVENT.PLAYER_MOVED_RIGHT.action = function(){
+			//ACTIVE_LEVEL.advance(CHECKPOINT.MOVE.RIGHT);
+		}
+
+		EVENT.PLAYER_MOVED_DOWN.action = function(){
+			//ACTIVE_LEVEL.advance(CHECKPOINT.MOVE.DOWN);
+		}
+
+		EVENT.PLAYER_MOVED_LEFT.action = function(){
+			//ACTIVE_LEVEL.advance(CHECKPOINT.MOVE.LEFT);
+		}
+
+		EVENT.CORRECT_MOVE.action = function(){
+			
+		}
+
+		EVENT.PLAYER_PAUSE.action = function(){
+			
+			//ACTIVE_LEVEL.togglePlayerPause();
+		}
+
+		EVENT.WRONG_MOVE.action = function(){
+			//EventManager.register(EVENT.PLAYER_DEATH);
+		}
+
+		EVENT.MOVES_COMPLETE.action = function(){
+			//am.addAnim(new Transition(player_grp,"posY", -300, 1000, "SMOOTH"), true);
+			//am.addAnim(new Transition(player_grp,"posY", 0, 3000, "SMOOTH"));
+		}
+
+		EVENT.COMBO_COMPLETE.action = function(){
+			//am.addAnim(new Transition("player_grp","posY", -600, 1000, "ACCEL"));
+		}
+
+		EVENT.STAGE_COMPLETE.action = function(){
+			//am.addAnim(new Transition(game.level.stage.graphics[0],"posY", 300, 1000, "SMOOTH"), true);				
+		}
+
+		EVENT.LEVEL_COMPLETE.action = function(){
+			//am.addAnim(new Transition(player_grp,"posY", -600, 1000, "ACCEL"), true);
+		}
+
+		EVENT.LEVEL_START.action = function(){
+		}
+
+		EVENT.PLAYER_DEATH.action = function(){
+			//am.addAnim(new Transition(player_grp,"posY", 600, 1000, "ACCEL"), true);
+		}
+	//End EVENT.ACTION ASSIGNMENT
+
+		
+
+
+
+	//-------   BEHAVIORS    ---------//
+
+	asTransform = function(node){
+	//INFO: adds transform information to Node
+			
+		//Tag node asTransform
+		node.asTransform = true;
+			
+		node.type = TRANSFORM;	
+		//new XYPoint object
+		node.posX = 0;
+		node.posY = 0;
+		node.pivX = 0;
+		node.pivY = 0;
+		node.rotate = 0;
+		node.scaleX = 0;
+		node.scaleY = 0;
+		node.scaleX = 1;
+		node.scaleY = 1;
+		
+		node.velX = 0;
+		node.velY = 0;
+		node.velScaleX = 0;
+		node.velScaleY = 0;
+		node.velRotate = 0;
+		
+		
+		node.showLabel = true;
+		node.label = "";
+		node.fontSize = 32;
+		node.showPivot = false;
+		node.color = "#0000ff";
+
+
+		//UPDATE FUNCTION
+		node.updateTransform = function(){
+			//UPDATE TRANSFORM
+			//console.log("updating: " + node.name);
+
+			node.posX += node.velX;
+			node.posY += node.velY;
+			node.rotate += node.velRotate;
+			node.scaleX += node.velScaleX;
+			node.scaleY += node.velScaleY;
+		};
+		node.updateCommandList.push(node.updateTransform);
+
+		//DRAW FUNCTION 	
+		node.drawTransform = function(){
+			
+			// TRANSLATE THE CONTEXT TO DRAW
+			ctx.translate(node.posX, node.posY);
+			ctx.rotate(node.rotate * Math.PI / 180);
+			ctx.scale(node.scaleX,node.scaleY);
+		
+			
+			//draw pivot
+			if(node.showPivot){
+				var r = 5;
+				ctx.strokeStyle = "#000000";
+				ctx.beginPath(); 
+				ctx.arc(0, 0, r, 0, 2 * Math.PI, true); //DRAW CIRCLE PATH
+				ctx.fillStyle= "#00ff00";
+				ctx.fill();
+			}
+			
+			//draw LabelText
+			if(node.showLabel){
+				ctx.fillStyle = node.color;
+				ctx.textAlign = "center";
+	  			ctx.font = "bold " + node.fontSize + "px Arial";
+	  			ctx.fillText(node.label,0,0);
+			}
+		};
+		
+		node.drawCommandList.push(node.drawTransform);
+
+		return node;
+	}//END asTransform
+
+	asSprite = function(node){
+	//INFO: Adds Sprite Image, and Color Sprite  and Align information to Node
+		//Requires Node to have asTransform too -- adds it if not found.
+
+		//CHECK for Redundancy
+		if(node.asSprite){
+			//console.warn("asSprite:Constuctor: \"%s\" is already asSprite", node.name);
+			return;
+		}
+
+		//CHECK for asTransform
+		if(!node.asTransform){
+			//console.warn("asSprite:Constuctor: %s: No asTransform  behavior found: Adding behavior", node.name);
+			asTransform(node);
+		}
+
+		//Tag Node as Sprite
+		node.asSprite = true;
+
+		
+		node.type = SPRITE;
+		node.width = MOVE_SIZE;
+		node.height = MOVE_SIZE;
+		node.color = "#00ff00";
+		node.opacity = 1;
+		node.visibility = true;
+		node.image = null;
+		node.showShape = true;
+
+		
+		node.setImage = function(img){
+
+			node.image = img;
+			
+			//This doen'st work anymore -- AssetManager is not reading the width/height automatically anymore.
+			//node.width = img.width;
+			//node.height = img.height;
+		}
+
+		node.align = {
+			posX:0,
+			posY:0,
+			offsetX:0,
+			offsetY:0,
+			spacingX:0,
+			spacingY:0,
+			spacingStart : 1,
+
+			isON : false,
+			xFormatting : ALIGN.CENTER,
+			yFormatting : ALIGN.CENTER,
+		};
+
+		//TO-DO: add node align object as a behavior instead hard coding into node Object. Perhaps other things would like node behavior.
+		//
+		node.align.updateSpacing = function(){
+			//UPDATE SPACING
+			if(node.parent.align){
+				var myIndex = node.parent.children.indexOf(node) + node.parent.align.spacingStart;
+				node.align.posX = myIndex * node.parent.align.spacingX;
+				node.align.posY = myIndex * node.parent.align.spacingY;
+
+				if(node.align.isON){
+					node.posX = node.align.posX; // TO-DO : can't animator with ALIGN ON unless we separate from POSITION!
+					node.posY = node.align.posY;
+				}
+			}	
+		}
+		//Add the update to UpdateList
+		node.updateCommandList.push(node.align.updateSpacing);
+
+		
+		//DRAW FUNCTION
+		node.drawSprite = function(){
+				
+			//START CUSTOM DRAWING CODE HERE ---------------------------
+		
+				ctx.globalAlpha = node.opacity;
+
+				if(node.image === null){
+					if(node.showShape){
+						//DRAW RECTANGLE
+						ctx.fillStyle=node.color;
+						ctx.fillRect(
+							(-.5 * node.width), 	//startX
+							(-.5 * node.height),	//startY
+							node.width,				//width
+							node.height 			//height
+						); 
+					}
+				
+				}else{
+
+					//DRAW IMAGE
+					var clipX, clipY = 0;
+					var clipWidth = node.width;
+					var clipHeight = node.height;
+					var x = (-.5 * node.width);
+					var y = (-.5 * node.height); 
+
+					ctx.drawImage(node.image,x,y,node.width,node.height)
+					
+				}
+				
+			
+			//END CUSTOM DRAWING ----------------------------------
+		};
+		node.drawCommandList.push(node.drawSprite);
+
+
+		node.updateSprite = function(){
+			//UPDATE SPRITE
+			if(node.opacity < 0){
+				node.opacity = 0;
+			}
+		}
+		node.updateCommandList.push(node.updateSprite);
+
+		return node
+	}//END asSprite
+
+	asParticle = function(node){
+		//Dependants
+		if(!node.asSprite){
+			asSprite(node);
+		}
+		
+		//Tag asParticleEmitter
+		if(node.asParticle){
+			console.warn("asMove: \"%s\" already has behavior", node.name);
+			return node;
+		}else{
+			//Tag asParticle
+			node.asParticle = true;
+		}
+
+		//new attributes
+		node.isAlive;
+		node.birth;
+		node.lifeSpan;
+		node.age;
+		node.birthPosX, node.birthPosY;
+
+
+		node.setDefault = function(){
+			
+			//set default values.
+			node.posX = node.posY = node.BirthPosX = node.BirthPosY = node.rotate = 0;
+			node.scaleX = node.scaleY = 1;
+			node.velX = node.velY = node.velScale = node.velRotate = 0;
+
+			node.isAlive = true;
+			node.birth = (new Date).getTime();
+			node.lifeSpan = 2000; //in milliseconds
+			node.age = 0;
+
+		}
+		node.setDefault();
+
+		node.onDeath = function(){
+
+		}
+
+		node.onBirth = function(){
+
+		}
+
+		node.onFirstUpdate = function(){
+			node.onBirth();
+		}
+
+		node.updateAge = function(){
+			//find age as a percentage
+			node.age = ((new Date).getTime() - node.birth) / node.lifeSpan;
+			
+			if(node.age > 1){
+				node.isAlive = false;
+			}
+		}
+
+		node.updateOverrides = function(particle){
+			//This function will be overwritten
+			//with specific instructions modifying and mapping particle attributes.
+			//ex:    opacity ---> inverse-age.
+			//ex:    scale -----> age
+		}
+
+		//UPDATE FUNCTION
+		node.updateParticle = function(){
+			
+			//find age as a percentage
+			node.updateAge();
+			node.updateOverrides(); // functions that have equations attached to attributes. 
+	 		
+		};
+		node.updateCommandList.push(node.updateParticle);
+
+	}//End asParticle
+
+	asParticleEmitter = function(node){
+		
+		//Dependants
+		//requires AssetManager, and asParticle()
+		if(!node.asTransform){
+			asTransform(node);
+		}
+		if(!asParticle){
+			console.warn("asParticleEmitter: Missing Dependant function \'asParticle\' ");
+		}
+		
+		//Tag asParticleEmitter
+		if(node.asEmitter){
+			console.warn("asMove: \"%s\" already has behavior", node.name);
+			return node;
+		}else{
+			//Tag asParticleEmitter
+			node.asParticleEmitter = true;
+		}
+		
+		
+		//Make default particle as template
+		node.particle = node.createNode("particleTemplate");
+		asParticle(node.particle);
+		
+		//special settings for particleTemplate
+		node.particle.visibility = false;
+		node.updateParticle = function(){};
+
+		node.particleList = [];
+		node.particleImage;
+		node.forceFieldList = [];
+		//node.particleParent = node;
+
+		node.setParticleDefault = function(particle){
+			//Defaults
+
+			//Set Particle Image
+			//console.warn("setting particle image");
+			particle.setImage(node.particle.image);
+			
+
+			//particle defaults
+			//TODO: COPY over these attributes in a loop -- making sure not to copy the DefCues Visibility.
+			particle.posX = node.particle.birthPosX;
+			particle.posY = node.particle.birthPosY;
+			particle.rotate = node.particle.rotate;
+			particle.scaleX = node.particle.scaleX;
+			particle.scaleY = node.particle.scaleY;
+			particle.velX = node.particle.velX;
+			particle.velY = node.particle.velY;
+			particle.velRotate = node.particle.velRotate;
+			particle.velScaleX = node.particle.velScaleX;
+			particle.velScaleY = node.particle.velScaleY;
+			particle.color = node.particle.color;
+			particle.opacity = node.particle.opacity;
+			particle.width = node.particle.width;
+			particle.height = node.particle.height;
+
+			//over-ride functions
+			particle.onBirth = node.particle.onBirth;
+			particle.onDeath = node.particle.onDeath;
+			particle.updateOverrides = node.particle.updateOverrides;
+		}
+
+		node.onEmit = function(){
+			//This function will be overwritten
+		}
+
+		node.emit = function(num){
+			//console.log("asParticleEmitter: emitting particles")
+
+			for(var i=0;i<num;i++){
+				//console.log("emitParticle: particleParent is %s", node.particleParent.name);
+				node.onEmit();
+				var particle = node.particle.parent.createNode(node.getUniqueName("particle"));
+				asParticle(particle);
+				
+				node.setParticleDefault(particle);
+				
+				node.particleList.push(particle);
+			}
+		}
+
+		node.addForceField = function(field){
+			if(field){
+				node.forceFieldList.push(field);
+			}else{
+				console.error("addForceField: argument type error: Expecting asforceField")
+			}
+		}
+
+		node.applyForceFields = function(a_particle){
+			for(var i = 0; i < node.forceFieldList.length; i++){
+				node.forceFieldList[i].processParticle(a_particle);
+			}
+		}
+
+		
+
+		node.emitterUpdate = function(){
+			if(node.particleList.length != 0){
+				var saveParticleList = [];
+
+				for (var i=0;i<node.particleList.length;i++){
+					var particle = node.particleList[i];
+
+					//condition to kill particle   - out of bounds
+					if(!particle.isAlive){
+						//killing particle
+						//console.log("killing particle %s", particle.name)
+						particle.onDeath();
+						node.deleteNode(particle);
+
+					}else{
+						//save particle
+						saveParticleList.push(particle);
+
+						//process particles
+						node.applyForceFields(particle);
+					}
+				}
+
+				node.particleList = saveParticleList;
+
+
+			}
+		}
+		node.updateCommandList.push(node.emitterUpdate);
+		
+		
+
+		/*
+		node.drawEmitter = function(){
+			if(this.pList.length != 0){
+				for (i=0;i<this.pList.length;i++){
+					//this.pList[i].draw();
+					
+				}
+			}
+		}
+		node.drawCommandList.push(node.drawEmitter);
+		*/
+
+
+	}// End asParticleEmitter
+
+
+	asForceField = function(node){
+		//Dependants
+		//requires AssetManager, and asParticle()
+		if(!node.asTransform){
+			asTransform(node);
+		}
+
+		//Tag asForceField
+		if(node.asEmitter){
+			console.warn("asMove: \"%s\" already has behavior", node.name);
+			return node;
+		}else{
+			//Tag asForceField
+			node.asParticleEmitter = true;
+		}
+
+		//variables
+		node.processParticle = function(particle){
+		}
+
+		return node;
+	}
+
+
+
+
+	// ** still working on this.
+	asCell = function(node){
+		//DEPENDANTS
+		if(!node.asSprite){
+			asSprite(node);
+		}
+
+		//CHECK for Redundancy
+		if(node.asCell){
+			//console.warn("asContainer:Constuctor: \"%s\" is already asSprite", node.name);
+			return;
+		}
+		
+
+		node.asCell = {
+			childMargin: 5,
+			
+			childPadding: 5,
+
+			numChildCells: 0,
+			
+			childCellList:[],
+
+			childSpacing: 20,
+
+			childAlign: "center",
+
+			posX:0,
+			posY:0,
+
+
+
+			update: function(){
+
+				node.asCell.childCellList = node.getChildren("asCell");
+
+
+				//each cell.
+				for(var i = 0; i < node.asCell.childCellList.length; i++){
+					
+					//asCELL_PARENT ACTIONS
+						//find my total width
+						//set childcell positions
+
+					//asCELL_CHILD ACTIONS
+						//Find my total width
+
+				}
+
+
+
+			}
+
+		}
+
+		node.updateCommandList.push(node.asCell.update);
+		/*
+		node.margin = 5;
+		node.border = 5;
+		node.backgroundColor;
+		node.padding = 5;
+		node.content = null;
+		*/
+
+	}
+
+	asCheckpoint = function(node){
+		//ABOUT TO STRIP THIS SHIT OUT SO ITS ONLY CHECKPOINT STUFF.
+		
+		//DEPENDANTS
+		if(!node.asCard){
+			asCard(node);
+		}
+		//Tag asCheckpoint
+		if(!node.asCheckpoint){
+			node.asCheckpoint = true;
+		}
+			
+		node.type = CHECKPOINT; //BY DEFAULT
+		node.value;
+
+		node.isComplete = false;
+		node.isCompleteFIRST_TIME = true; //to see the first time it was completed.
+		
+		node.isStarted = false;
+		node.isStartedFIRST_TIME = true;
+
+		node.isActive = false;
+		node.isActiveFIRST_TIME = true;
+
+		//node.timeStart;
+		//node.timeComplete;
+		
+
+		node.onStart = function(){
+
+		}
+
+		node.onLoad = function(){
+
+		}
+
+		node.onActive = function(){
+			console.log("%s node is active", node.name);
+		}
+
+		
+
+		node.getChildrenComplete = function(){
+
+			//CREATE list of CHILDREN that have "isComplete" property
+			var checkpointChildren = [];
+			for(var i = 0; i < node.children.length; i++){
+				if(node.children[i].hasOwnProperty("isComplete")){     //TO DO --	"isComplete" should be  ... 
+					checkpointChildren.push(node.children[i]);			//			"node.children[i].asCheckpoint" object intead
+				}
+			}
+
+			//COUNT NUMBER of "isComplete" that are TRUE
+			if(checkpointChildren.length){
+				var numChildrenComplete = 0;
+
+				//COUNT number of children complete
+				for(var i = 0; i < checkpointChildren.length; i++){
+					if(checkpointChildren[i].isComplete){
+						numChildrenComplete++;
+					}
+				}
+
+				//If ALL Children Complete
+				if(numChildrenComplete == checkpointChildren.length){
+					return true;
+				}
+
+			}else{
+				//I have no children that have "isComplete" property.
+				//return the current value of isComplete.
+				return node.isComplete;
+			}
+
+		}
+
+		node.getChildrenActive = function(){
+			var nodeList = [];
+			var children = node.getChildren("asCheckpoint");
+
+			for(var i = 0; i < children.length; i++){
+				if(children[i].isActive){     //TO DO --	"isComplete" should be  ... 
+					nodeList.push(children[i]);			//			"node.children[i].asCheckpoint" object intead
+				}
+			}
+
+			return nodeList;
+		}
+		
+		node.autoStart = function(){
+			// PURPOSE: Test weather this checklist should load or not.
+			// and set isStarted
+			// USED in node.checkpointUpdate()
+
+			var sibling = node.getOlderSister("type", node.type); 
+			
+			if(sibling){
+				if(sibling.isComplete){
+					node.isStarted = true;
+				}
+			}else{
+				//I'm First Born.
+				node.isStarted = true;
+			}
+		}
+		
+		
+		
+		node.checkpointUpdate = function(){
+			//CHECKPOINT UPDATE
+			node.isComplete = node.getChildrenComplete();
+
+			//TODO: THis causes the PARENT to run onComplete() before the CHILD.
+			//isComplete
+			if(node.isComplete && node.isCompleteFIRST_TIME){
+				node.onComplete();
+				node.isCompleteFIRST_TIME = false;
+				//node.isActive = false;
+			}
+
+			
+			//isStarted
+			node.autoStart();
+			if(node.isStarted && node.isStartedFIRST_TIME){
+				node.onStart();
+				node.isStartedFIRST_TIME = false;
+				//node.isActive = true;
+			}
+
+
+			//isActive
+			//If CHILDREN
+			if(node.getChildren("asCheckpoint").length){ //You're active if one of your children is ACTIVE
+				if(node.getChildrenActive().length){ //
+					node.isActive = true;
+				}else{
+					node.isActive = false;
+				}
+
+			//if NO CHILDREN
+			}else{
+
+				var oldestParent = node.getOldestParent("asLevel");
+				//var leafNodes = oldestParent.getLeafNodes("asCheckpoint");// THIS DOENSNT WORK
+				var leafNodes = oldestParent.getDecendents("asMove"); // need to do this better without calling "asMove"
+				var self_index = leafNodes.indexOf(node);
+
+
+				if(!node.isComplete){
+
+					 //if OLDEST sib (i'm the first)
+					if(self_index == 0){
+						node.isActive = true;
+					
+					} //if NOT-OLDEST (is my older sib complete)
+					else if(leafNodes[self_index - 1].isComplete){
+						node.isActive = true;
+					}
+
+				}else{
+					node.isActive = false;
+				}				
+			}//END If CHILDREN
+
+
+			if(node.isActive && node.isActiveFIRST_TIME){
+				node.onActive();
+				node.isActiveFIRST_TIME = false;
+			}
+		}
+		//register Sub-Class udpate with Base-Class
+		node.updateCommandList.push(node.checkpointUpdate);
+		
+		
+		node.checkpointDraw = function(){
+		}
+		//register Sub-Class draw with Base-Class
+		node.drawCommandList.push(node.checkpointDraw);
+	}//END asCheckpoint
+
+
+
+	asMove = function(node){ 
+		//Dependants
+		if(!node.asCheckpoint){
+			asCheckpoint(node);
+			node.asCheckpoint = true;
+		}
+		if(!node.asSprite){
+			asSprite(node);
+			node.asSprite = true;
+		}
+		if(!node.asCard){
+			asCard(node);
+			node.asCard = true;
+		}
+
+		//Tag asMove
+		if(node.asMove){
+			console.warn("asMove: \"%s\" already has behavior", node.name);
+			return node;
+		}else{
+			
+			//Tag asStage
+			node.asMove = true;
+		}
+
+
+
+		node.setDefault = function(){
+			//asCheckpoint
+			node.type = CHECKPOINT.MOVE;
+			node.value = CHECKPOINT.MOVE.UP;
+			//node.align.isON = true;
+			
+			//asSprite
+			node.color = "#00ff00";
+			node.width = MOVE_SIZE; //was 60px
+			node.height = node.width;
+
+			//asCard
+			node.background.opacity = 0;
+			node.visibility = true;
+			//node.showPosX = node.align.posX;
+			node.hidePosX = 0;
+			node.hideVisibility = 0;
+			node.hide();
+			//asCard Defaults
+			//node.showPosX = 0;
+			//node.showPosY = 0;
+			node.showOpacity = 1;
+			node.hideOpacity = 0;
+
+
+		};
+
+		node.setDefault();
+
+
+		node.updateAsMove = function(){
+			//needs to read nodes after their built below.
+			node.showPosX = node.align.posX;
+		}
+		node.updateCommandList.push(node.updateAsMove);
+		
+
+
+		node.onComplete = function(){
+			node.align.isON = false;
+			node.opacity = .25;
+			
+			postAnim = function(){
+				//node.opacity = .25;
+			}
+			/*
+			am.addAnim(new Transition(node,"posY", -10, 40, "LINEAR"));
+			am.addAnim(new Transition(node,"posY", 5, 80, "LINEAR"));
+			am.addAnim(new Transition(node,"posY", 0, 60, "LINEAR", postAnim));
+			*/
+
+			TweenLite.to(node, .4, {posY:-10, ease:Linear.easeNone});
+			TweenLite.to(node, .8, {posY:-10, ease:Linear.easeNone});
+			TweenLite.to(node, .6, {posY:-10, ease:Linear.easeNone, onComplete:postAnim});
+
+
+		}
+
+		node.onShow = function(){
+			console.log("asMove.onShow: \"%s\" is showing...", node.name);
+
+			//node.visibility = true;
+			//node.posX = node.align.posX
+			//am.addAnim(new Transition(node,"posX", 0, node.align.posX, "DECEL"));
+
+		}
+	}
+
+	asMoveUp = function(node){ 
+		
+		//Dependants
+		if(!node.asMove){
+			asMove(node);
+			node.asMove = true;
+			
+		}
+			
+		//Tag asStage
+		node.asMoveUp = true;
+		
+		//Set Attributes
+		var img = AssetManager.addImage("images/arrowUp200px.png");
+		node.setImage(img);
+		node.value = CHECKPOINT.MOVE.UP;
+	}
+
+	asMoveRight = function(node){ 
+		//Dependants
+		if(!node.asMove){
+			asMove(node);
+			node.asMove = true;
+		}
+			
+		//Tag asStage
+		node.asMoveRight = true;
+		
+		//Set Attributes
+		var img = AssetManager.addImage("images/arrowRight200px.png");
+		node.setImage(img);
+		node.width = 60;
+		node.height = 60;
+		node.value = CHECKPOINT.MOVE.RIGHT;
+	}
+
+	asMoveDown = function(node){ 
+		//Dependants
+		if(!node.asMove){
+			asMove(node);
+			node.asMove = true;
+		}
+			
+		//Tag asStage
+		node.asMoveDown = true;
+		
+		
+		//Set Attributes
+		var img = AssetManager.addImage("images/arrowDown200px.png");
+		node.setImage(img);
+		node.value = CHECKPOINT.MOVE.DOWN;
+	}
+
+	asMoveLeft = function(node){ 
+		//Dependants
+		if(!node.asMove){
+			asMove(node);
+			node.asMove = true;
+		}
+			
+		//Tag asStage
+		node.asMoveLeft = true;
+		
+		//Set Attributes
+		var img = AssetManager.addImage("images/arrowLeft200px.png");
+		node.setImage(img);
+		node.value = CHECKPOINT.MOVE.LEFT;
+	}
+
+
+	asCombo = function(node){
+		//Dependants
+		if(!node.asCheckpoint){
+			asCheckpoint(node);
+			node.asCheckpoint = true;
+		}
+		if(!node.asSprite){
+			asSprite(node);
+			node.asSprite = true;
+		}
+		if(!node.asCard){
+			asCard(node);
+			node.asCard = true;
+		}
+
+		//Tag asCombo
+		if(node.asCombo){
+			console.warn("asCombo: \"%s\" already has behavior", node.name);
+			return node;
+		}
+
+
+		//Tag asCombo
+		node.asCombo = true;
+
+		node.isFirstShowing = false;
+		node.showMovesDelayTime = 200;
+
+		node.setDefault = function(){
+			node.type = CHECKPOINT.COMBO;
+			
+			//asSprite Defaults
+
+			node.align.isON = false;
+			node.align.spacingStart = 1;
+			node.color = "#0000ff"
+			node.width = COMBO_SIZE; //was 60px
+			node.height = node.width;
+			node.posX = 0;
+			node.posY = 0;
+
+			//asCard Defaults
+			node.showPosX = 0;
+			node.showPosY = 0;
+			node.showOpacity = 1;
+			node.hideOpacity = 1;
+
+
+
+			node.background.opacity = 0;
+		};
+		node.setDefault();
+
+		node.alignCombo = "center";
+		node.alignCombo_posX = 0;
+		node.alignCombo_posY = 0;
+		node.alignCombo_spacingX = 100;
+		node.alignCombo_spacingY = 100;
+
+
+		node.addMove = function(moveBehavior){
+			var move = node.createNode(node.getUniqueName("move"));
+				moveBehavior(move);
+			return move;
+		}
+
+		node.addCombo = function(comboBehavior){
+			var combo = node.createNode(node.getUniqueName("combo"));
+				comboBehavior(combo);
+			return combo;
+		}
+
+		node.updateAlignCombo = function( alignWith, alignTo){
+			var posX = 0;
+			var posY = 0;
+			var nodes = [];
+			var parent = node.getParent(alignTo);
+			var allSibs = parent.getChildren(alignWith); //this is dangerous in that if COMBO is not equal to "alignWith" its index is lost.
+			var selfIndex = allSibs.indexOf(node);
+			var offsetX = 0;
+			var offsetY = 0;
+
+
+			//Apply Offset
+			if(node.alignCombo == "center"){
+
+				//Count position
+				for(i = 0; i < selfIndex; i++){
+					posX += allSibs[i].width;
+					posY += allSibs[i].height;
+				}
+				
+				//count overall width of parent's children
+				for(i = 0; i < allSibs.length; i++){
+
+					//add width/height to offsets
+					offsetX += allSibs[i].width;
+					offsetY += allSibs[i].height;
+
+					//add spacing to offsets
+					//offsetX += node.alignCombo_spacingX * i;
+					//offsetY += node.alignCombo_spacingY * i;
+				}
+
+				//for Centering offset.
+				//offsetX *= .5;
+				//offsetY *= .5;
+
+				posX -= (offsetX/2) - (node.width/2);
+				posY -= (offsetY/2) - (node.height/2);
+
+			}else if(node.alignCombo == "right"){
+				offsetX = 0;
+				offsetY = 0;
+				posX += offsetX;
+				posY += offsetY;
+			
+			}else if(node.alignCombo == "left"){
+				offsetX = 0;
+				offsetY = 0;
+				posX = (selfIndex * node.alignCombo_spacingX) + offsetX;
+				posY = (selfIndex * node.alignCombo_spacingY) + offsetY;
+			}
+
+			//console.log("%s .offsetX is %s", node.name, offsetX);
+			//posX = (selfIndex * node.alignCombo_spacingX) + offsetX;
+			//posY = (selfIndex * node.alignCombo_spacingY) + offsetY;
+
+			
+
+			node.alignCombo_posX = posX;
+			node.alignCombo_posY = posY;
+		}
+
+
+
+
+
+		//TODO: Card should update all this align. and po stuff BELOW>
+		node.updateAsCombo = function(){
+
+			node.updateAlignCombo("asCheckpoint","asCheckpoint")
+			
+
+			//needs to read nodes after their built below.
+			//node.showPosX = node.align.posX;
+
+			node.showPosX = node.alignCombo_posX;
+		}
+		node.updateCommandList.push(node.updateAsCombo);
+
+
+		node.onActive = function(){
+
+		}
+
+		node.onComplete = function(){
+			//node.hideMoves();
+			node.color = "#000000";
+			node.opacity = .25;
+
+
+
+			var jiggle = new TimelineLite();
+			jiggle.to(node, .1, {"posY":node.showPosY - 5, easing:Linear.easeNone});
+			jiggle.to(node, .1, {"posY":node.showPosY + 3, easing:Linear.easeNone});
+			jiggle.to(node, .1, {"posY":node.showPosY, easing:Linear.easeNone});
+		}
+
+		node.hideMoves = function(){
+			var moves = node.getChildren("asCheckpoint", true);
+			if(moves.length){
+				for(var i = 0; i < moves.length; i++){
+					moves[i].hide();
+				}
+			}
+		}
+
+		node.showMoves = function(){
+			var moves = node.getChildren("asCheckpoint", true);
+			if(moves.length){
+				for(var i = 0; i < moves.length; i++){
+					moves[i].show();
+				}
+			}
+		}
+
+		/*
+		node.showHint = function(){
+			//build hint bubble.
+
+			//getMoves
+			var moves = node.getChildren("asCheckpoint", true);
+
+
+		}
+		*/
+
+
+		node.onShow = function(){
+			
+			if(node.isFirstShowing){
+				//Animate dummy object for delay.
+				//node.dummy = 0;
+				//am.addAnim(new Transition(node,"dummy", 1, node.showMovesDelayTime, "LINEAR", node.showMoves));
+				//TweenLite.to
+			}
+		}
+	}
+
+	asStage = function(node){
+		//Dependants
+		if(!node.asCheckpoint){
+			asCheckpoint(node);
+			node.asCheckpoint = true;
+		}
+		if(!node.asSprite){
+			asSprite(node);
+			node.asSprite = true;
+		}
+		if(!node.asCard){
+			asCard(node);
+			node.asCard = true;
+		}
+
+		if(node.asStage){
+			console.warn("asStage: \"%s\" already has behavior", node.name);
+			return node;
+		}
+
+		//Tag asStage
+		node.asStage = true;
+
+		node.setDefault = function(){
+			node.type = CHECKPOINT.STAGE;
+			node.value = 0;
+			node.color = "#ff0000"
+			node.align.isON = false;
+			node.align.spacingStart = 0;
+			node.align.spacingX = 100;
+			//node.setImage(arrowDownImg);
+			node.width = 60;
+			node.height = 60;
+			//node.posY = -600;
+			//node.posX = -200;
+			node.posX = 0;
+			node.posY = VIEW_TOP - 200;
+
+			//asCard
+			//node.showPosX = -200;
+			node.showPosX = 0;
+			//node.showPosY = -200;
+			node.showPosY = VIEW_TOP / 2.5;
+			node.showSpeed = .8;
+			node.showOpacity = 1;
+			//node.hidePosX = -200;
+			node.hidePosX = 0;
+			//node.hidePosY = 700;
+			node.hidePosY = VIEW_BOTTOM;
+			node.hideSpeed = .8
+			node.hideOpacity = 1;
+
+			node.background.opacity = 0;
+
+		};
+		node.setDefault();
+
+		node.addCombo = function(comboBehavior){
+			var combo = node.createNode(node.getUniqueName("combo"));
+				comboBehavior(combo);
+			return combo;
+		}
+
+		node.onComplete = function(){
+			node.color = "#000000";
+			node.opacity = .25;
+	
+			TweenLite.to(node, 1, {posY:700, ease:Power1.Out});
+			//am.addAnim(new Transition(node,"posY", 700, 800, "DECEL"), true);
+			node.getParent("asLevel").getDecendents("name","bg_emitter")[0].emit(5);
+		}
+
+		node.onStart = function(){
+			
+			//am.addAnim(new Transition(node,"posY", -300, 400, "DECEL"), true);
+			node.show();
+
+		}
+
+		node.showCombos = function(){
+			var combos = node.getChildren("asCheckpoint", true);
+			if(combos.length){
+				for(var i = 0; i < combos.length; i++){
+					combos[i].show();
+				}
+			}
+		}
+
+		node.onShow = function(){
+			//node.showCombos();
+			//am.addAnim(new Transition(node,"posY", -300, 400, "DECEL"), true);
+		}
+
+		node.onPostShow = function(){
+			//node.showCombos();
+		}
+
+		node.onPreShow = function(){
+			node.showCombos()
+		}
+	}
+
+	asTimer = function(checkpoint){
+		checkpoint.color = "#cccccc";
+
+		checkpoint.updateTimer = function(){
+			checkpoint.label = ACTIVE_LEVEL.timePast;
+		}
+
+		checkpoint.updateCommandList.push(checkpoint.updateTimer);
+	}
+
+	asGradient = function(node){
+		//Dependants
+		if(!node.asTransform){
+			asTransform(node);
+		}
+		if(!node.asSprite){
+			asSprite(node);
+		}
+		
+		//Tag asCard
+		if(node.asGradient){
+			console.warn("asGradient: \"%s\" already has behavior", node.name);
+			return node;
+
+		}else{
+			node.asGradient = true;
+		}
+
+		node.setDefault = function(){
+			node.height = 200;
+			node.width = 200;
+		}
+		node.setDefault();
+
+		node.drawAsGradient = function(){
+			//Create gradient
+			var grd = ctx.createLinearGradient(0,node.height/2,0,node.height/-2);
+			grd.addColorStop(0, "white");
+			//grd.addColorStop(.5, "#000066");
+			grd.addColorStop(1, "#dddddd");
+
+			// Fill with gradient
+			var topLeftX = node.width / -2;
+			var topLeftY = node.height / -2;
+			var botRightX = node.width;
+			var botRightY = node.height;
+
+			ctx.fillStyle = grd;
+			ctx.fillRect(topLeftX, topLeftY, botRightX, botRightY);
+		}
+		node.drawCommandList.push(node.drawAsGradient);
+
+
+	}
+
+
+	asCard = function(node){
+	//INFO: Give transform properties to allow show/hide animation.
+	//Creates a child Sprite as a background. 
+		
+		//Dependants
+		if(!node.asTransform){
+			asTransform(node);
+			node.asTransform = true;
+		}
+		if(!node.asSprite){
+			asSprite(node);
+			node.asSprite = true;
+		}
+
+		
+		//Tag asCard
+		if(node.asCard){
+			console.warn("asCard: \"%s\" already has behavior", node.name);
+			return node;
+
+		}else{
+			node.asCard = true;
+		}
+
+		//BGSprite
+		node.background = node.createNode("background_sprite")
+		asSprite(node.background);
+		
+
+		node.setDefault = function(){
+			//Default Style
+			node.posX = 0;
+			node.posY = 0;
+			node.showShape = false;
+			
+			node.isShowing = true;
+
+			node.background.color = "#000000";
+			node.background.opacity = .8;
+			
+			node.showSpeed = .4;
+			node.showInterp = "DECEL"
+			node.showInterupt = false;
+			node.showPosX = 0;
+			node.showPosY = 0;
+			node.showOpacity = 1;
+			node.showScaleX = 1;
+			node.showScaleY = 1;
+
+			node.hideSpeed = .4;
+			node.hideInterp = "DECEL"
+			node.hideInterupt = false;
+			node.hidePosX = -VIEW_X;
+			node.hidePosY = 0;
+			node.hideOpacity = 1;
+			node.hideScaleX = 1;
+			node.hideScaleY = 1;
+			//node.hideVisibility = false;
+		}
+		node.setDefault();
+
+		node.show = function(){
+			node.preAnimateIn();
+			node.animateIn(node.postAnimateIn);	
+		}
+
+		node.hide = function(){
+			node.preAnimateOut();
+			node.animateOut(node.postAnimateOut);
+		}
+
+		
+
+		node.animateIn = function(action){
+			//This should be a fore loop, that takes an ARRAY of elements to animate.
+			/*
+			am.addAnim(new Transition(node,"posX", node.showPosX, node.showSpeed, node.showInterp),node.showInterupt);
+			am.addAnim(new Transition(node,"posY", node.showPosY, node.showSpeed, node.showInterp));
+			am.addAnim(new Transition(node,"opacity", node.showOpacity, node.showSpeed, node.showInterp, action));
+			*/
+
+			TweenLite.to(node, node.showSpeed,
+			{
+				posX: node.showPosX, 
+				posY: node.showPosY, 
+				scaleX: node.showScaleX,
+				scaleY: node.showScaleY,
+				opacity: node.showOpacity,
+				ease: Strong.easeOut,
+				onComplete: action
+			});
+		}
+
+		node.animateOut = function(action){
+			/*
+			am.addAnim(new Transition(node,"posX", node.hidePosX, node.hideSpeed, node.hideInterp),node.hideInterupt);
+			am.addAnim(new Transition(node,"posY", node.hidePosY, node.hideSpeed, node.hideInterp));
+			am.addAnim(new Transition(node,"opacity", node.hideOpacity, node.hideSpeed, node.hideInterp, action));
+			*/
+
+			TweenLite.to(node, node.hideSpeed,
+			{
+				posX: node.hidePosX, 
+				posY: node.hidePosY,
+				scaleX: node.hideScaleX,
+				scaleY: node.hideScaleY,
+				opacity: node.hideOpacity,
+				ease: Strong.easeOut,
+				onComplete: action
+			});
+		}
+		
+		node.preAnimateIn = function(){
+			node.visibility = true;
+			node.onPreShow();
+		}
+
+		node.preAnimateOut = function(){
+			node.onPreHide();
+		}
+
+		node.postAnimateIn = function(){
+			//console.log("post animate in.")
+			node.isShowing = true;
+			node.onPostShow();
+			node.onShow();
+		}
+
+		node.postAnimateOut = function(){
+			//console.log("post animate out -- %s", node.name)
+			node.visibility = false;
+			node.isShowing = false;
+			node.onPostHide();
+			node.onHide();
+		}
+
+
+		//OverWRitable functions
+		node.onShow = function(){
+		}
+
+		node.onPreShow = function(){
+		}
+
+		node.onPostShow = function(){
+		}
+
+		node.onHide = function(){
+		}
+
+		node.onPreHide = function(){
+		}
+
+		node.onPostHide = function(){
+		}
+	}
+
+
+	asInputField = function(node){
+	//INFO: Manages Input from player. input commands change as 
+		//the game points to this object and calles it active.
+		//Requires asGameGraph. to give this behavior focus.
+
+		//CREATE Behavior OBJECT and CREATE POINTER to it's Base Node
+		node.asInputField = true;
+		node.inputCommandList = new InputCommandList;
+
+		return node;
+	}
+
+	asMenu = function(node){
+	//INFO: Manages focus on children that are of type InputField
+		
+		//Tag asMenu
+		node.asMenu = true;
+
+		node.defaultSelectedItem;	
+		node._selectedItem;
+
+
+		node.setDefaultSelectedItem = function(def_item){
+			if(def_item){
+				node.defaultSelectedItem = def_item;
+			}
+			return def_item
+		}
+
+		node.selectItem = function(item){
+			if(item){
+				
+				//DeSelect the currently Selected Item
+				if(node._selectedItem){
+					node._selectedItem.isSelected.setValue(false);
+				}
+				
+				item.isSelected.setValue(true);
+				node._selectedItem = item; //Point Menu to new Item
+			}
+
+			return item;
+		}
+
+		node.selectDefaultItem = function(){
+			
+			var item;
+
+			if(node.defaultSelectedItem){
+				item = node.selectItem(node.defaultSelectedItem);
+			}
+			
+			return item
+		}
+
+		node.getFirstItem = function(){
+			var item;
+			
+			if(node.getAllItems().length){
+				item = node.getAllItems()[0];
+			}
+
+			return item;
+		}
+
+		node.selectFirstItem = function(){
+			
+			var item = node.selectItem(node.getFirstItem());
+
+			return item;
+		}
+
+		
+		node.getSelectedItem = function(){
+			
+			return node._selectedItem;
+		}
+
+
+		node.getAllItems = function(){
+			
+			return node.getChildren("asMenuItem", true);
+		}
+
+		node.selectNextItem = function(c_direction){ 
+		//args example	: "value",  "value", selectNextItem(1) forwards
+			//				selectNextItem(-1) backwards
+			var items = [];
+			var itemIndex;
+			var nextItemIndex;
+			var	nextItem;
+			var direction = 1;
+			
+			//args
+			if(c_direction == 1){
+				direction = 1;
+			}else if(c_direction == -1){
+				direction = -1;
+			}
+			
+			items = node.getAllItems();
+
+			if(items.length){
+				itemIndex = items.indexOf(node._selectedItem);
+				nextItemIndex = itemIndex + direction;
+				
+				//Should We WRAP to FirstIndex
+				if(nextItemIndex > items.length - 1){
+					nextItemIndex = 0;
+
+				//Should we WRAP to LastIndex	
+				}else if(nextItemIndex < 0){
+					nextItemIndex = items.length - 1;
+				}
+
+				nextItem = items[nextItemIndex];
+
+			}else{
+				//There are no other Items.
+				nextItem = node._selectedItem;
+
+			}
+
+			
+			
+			node.selectItem(nextItem);
+			
+			return nextItem;
+		}
+		
+
+		node.onFirstUpdate = function(){
+			//SELECT AN ITEM
+			if(node.defaultSelectedItem){
+				node.selectDefaultItem();
+			}else{
+				node.selectFirstItem();
+			}
+		}
+
+		return node;
+
+	}
+
+	asMenuItem = function(node){
+	//INFO: Manages focus on children that are of type InputField
+		
+		//Tag asMenu
+		node.asMenuItem = true;
+
+		node.isSelected = new Flag(false);
+
+		node.onSelect = function(){
+			console.log("asMenuItem.onSelect: %s", node.name);
+		}
+
+		node.onDeselect = function(){
+			console.log("asMenuItem.onDeselect: %s", node.name);
+		}
+
+		node._updateIsSelected = function(){
+			//onSelect - resets Flag so the next time flag.setValue is run -- 
+			//it triggers onSelect and onDeselected respectively
+			if(node.isSelected.value && node.isSelected.isFirstTime){
+					node.isSelected.reset(); // restarts counter so that flag is raised when set again.
+					node.onSelect();
+
+			}
+			if(!node.isSelected.value && node.isSelected.isFirstTime){
+					node.isSelected.reset();
+					node.onDeselect();
+			}
+		}
+
+		node.updateMenuItem = function(){
+			//animate my shit.
+			node._updateIsSelected();
+		}
+		node.updateCommandList.push(node.updateMenuItem);	
+
+		
+		node.action = function(){
+			console.log("asMenuItem.action \"%s\"", node.name);
+		}
+
+		return node;
+	}
+
+	asScreen = function(node){
+	//INFO: OBJECT for holding SEPERATE INPUT and HANDLING MENU's and gamVIews
+		
+
+		//Dependants
+		if(!node.asInputField){
+			asInputField(node);
+			node.asInputField = true;
+		}
+		if(!node.asCard){
+			asCard(node);
+			node.asCard = true;
+		}
+
+		//Tag asScreen
+		node.asScreen = true;
+
+
+		//Default Style
+		node.background.width = VIEW_X;
+		node.background.height = VIEW_Y;
+		//node.posX = -VIEW_X; // position off screen.
+		node.color = "#000000";
+		node.background.opacity = .8;
+	}
+
+
+	asLevel = function(node){
+		
+		//Dependants
+		if(!node.asCheckpoint){
+			asCheckpoint(node);
+			node.asCheckpoint = true;
+		}
+		if(!node.asScreen){
+			asScreen(node);
+			node.asScreen = true;
+		}
+
+		
+		//Tag asScreen
+		node.asLevel = true;
+
+		//Game variables
+		node.moveList = []; //grab leaf nodes from top checkpointnode for this
+		node.moveIndex = 0;
+		node.activeMove;
+
+		//Time variables
+		node.timeCount = false; // flag when to start counting time.
+		node.timeStart;
+		node.timeComplete;
+		node.timePast = "00.00"; //for Display Only.
+		node.timePauseStart;
+		node.timePauseEnd;
+		node.activeMoveTimeStamp; //time when active Move was ready.
+
+
+		node.isPlayerPaused = false;
+
+		//BackgroundSprite
+		node.background.color = "eeeeee";
+		node.background.opacity = 1;
+
+		//UI elements
+		node.overlayUI;
+		node.timerUI;
+		node.startClockUI;
+		node.winCardUI;
+		node.hintUI;
+		node.rocketManUI;
+		node.rocketManShadowUI;
+		node.rocketManSmokeUI;
+		node.bgUI;
+
+		//initla positioning
+		node.posX = 0;
+		node.posY = 0;
+
+		//Build Lyr UI Overlay
+		node.buildLevelOverlayUI = function(){
+			var overlay = node.createNode("lvl_overlay");
+			overlay.setParent(node); //attaches to this level
+
+			return overlay;
+		}
+		//node.overlayUI = node.buildLevelOverlayUI();
+
+		node.buildHintUI = function(){
+
+			var hint = node.createNode("hint_bubble")
+			asCard(hint);
+
+			var img = AssetManager.addImage("images/chatBubble_100x100.png",100,100)
+	
+			hint.background.setImage(img);
+			hint.background.width = img.width;
+			hint.background.height = img.height;
+			hint.background.width = 50;
+			hint.background.height = 50;
+			
+			//set show atters
+			hint.showPosY = VIEW_TOP / 3;
+			hint.showPosX = 0;
+			hint.showOpacity = 1;
+			hint.showSpeed = 3;
+			hint.showInterp = "DECEL";
+			hint.showInterupt = true;
+
+			hint.hidePosY = VIEW_TOP / 2.5;// (hint.height *1.5);
+			hint.hidePosX = 0;
+			hint.hideScaleX = .1;
+			hint.hideScaleY = .1
+			hint.hideOpacity = 0;
+			hint.hideOpacity = 1;
+			hint.visibility = false;
+			hint.hideInterupt = true;
+
+			hint.posY = hint.hidePosY;
+			hint.posX = hint.hidePosX;
+			hint.scaleX = hint.hideScaleX;
+			hint.scaleY = hint.hideScaleY;
+			
+
+			hint.swapCurrentMoveImage = function(){
+				
+				//REMOVE old hint sprites.
+				var oldHints = node.hintUI.getChildren("name","hint");
+				for(var i = 0; i < oldHints.length; i++){
+					node.deleteNode(oldHints[i]);
+				}
+				
+				//GET active combo vars
+				var activeStage = node.activeMove.getParent("asStage");
+				var activeCombo = activeStage.getChildren("isActive", true)[0];
+			
+				//CREATE new hint sprites -- for each combo or move
+				var comboList = activeCombo.getChildren("asCheckpoint");
+				for(var i = 0; i < comboList.length; i++){
+					//var name = "hint_" + comboList[i].name;
+					var name = "hint";
+					var sprite_hint = node.hintUI.createNode(name);
+					asSprite(sprite_hint);
+
+					//SET position to active combo/move.
+					if(comboList[i].hasOwnProperty("asCombo")){
+						sprite_hint.posX = comboList[i].alignCombo_posX;
+
+					}else{
+						sprite_hint.posX = node.activeMove.posX; //TODO: figure out a way where i don't need this IF STATEMENT
+					}
+
+					//SET Image
+					var hintImage = comboList[i].image;
+					sprite_hint.setImage(hintImage);
+
+				}
+
+
+
+
+				
+				//MOVE to active combo position
+				//hint.posX = activeCombo.posX;
+				hint.posY = activeCombo.posY;
+				hint.setParent(activeCombo);
+				
+			}
+
+			hint.onPreShow = function(){
+				hint.swapCurrentMoveImage();
+			}
+
+			hint.onPreHide = function(){
+				hint.visibility = false;
+			}
+
+			return hint
+		}
+
+		node.delayShowHintUI = function(time){
+			//SHOW Hint after X number of seconds.     by first animating a dummy object for that amoun of time.
+			//node.hintUI.dummy = 0;	
+			//am.addAnim(new Transition(node.hintUI,"dummy", 100, time, "LINEAR", node.hintUI.show));
+			TweenLite.killTweensOf(node.hintUI.show);
+			TweenLite.delayedCall(time,node.hintUI.show);
+		}
+
+		node.buildBgUI = function(){
+			bg = node.createNode("bg_Gradient");
+			asGradient(bg);
+
+			bg.width = VIEW_X;
+			bg.height = VIEW_Y;
+
+			return bg;
+		}
+		
+
+		node.updateBgUI = function(){
+
+		}
+			
+
+		//Build Win Card
+		node.buildWinCardUI = function(){
+			var card
+			var text;
+			var time_txt;
+
+			card = node.createNode("win_card");
+			asCard(card);
+			card.background.opacity = 0;
+			card.posX = -VIEW_X - 200;
+
+				text = card.createNode("complete_text");
+				asTransform(text);
+				text.label = "Level Complete!";
+				text.fontSize = 32;
+				text.color = "#ffffff"
+				text.showLabel = true;
+				//text.posX = -120;
+
+				time_text = card.createNode("time_text");
+				asTransform(time_text);
+				time_text.label = node.timePast + "\"";
+				time_text.fontSize = 64;
+				time_text.color = "#ffffff";
+				time_text.showLabel = true;
+				//time_text.posX = -120;
+				time_text.posY = 80;
+
+			return card;
+		}
+		
+
+		node.setWinCardTimeStamp = function(timeText){
+			node.winCardUI.getChildren("name", "time_text")[0].label = timeText + "\"";
+		}
+
+
+		node.buildStartClockUI = function(){
+			var clock = node.createNode("startClock_grp");
+			asCard(clock);
+			clock.background.opacity = 0;
+			clock.dummy = 0; //dunny value to animate.
+				
+				var w = COUNTDOWN_SIZE;
+				var h = w;
+				
+
+				var three = clock.createNode("three_sprite");
+				asSprite(three);
+				var img3 = AssetManager.addImage("images/3_200px.png");
+				three.setImage(img3);
+				//three.width = 200;
+				//three.height = 200;
+				three.width = w
+				three.height = h
+				three.visibility = false;
+
+
+				var two = clock.createNode("two_sprite");
+				asSprite(two);
+				var img2 = AssetManager.addImage("images/2_200px.png");
+				two.setImage(img2);
+				//two.width = 200;
+				//two.height = 200;
+				two.width = w
+				two.height = h
+				two.visibility = false;
+
+				var one = clock.createNode("one_sprite");
+				asSprite(one);
+				var img1 = AssetManager.addImage("images/1_200px.png");
+				one.setImage(img1);
+				//one.width = 200;
+				//one.height = 200;
+				one.width = w
+				one.height = h
+				one.visibility = false;
+		
+
+			return clock;
+		}
+
+
+		//BEGINNING EVENT TIMELINE
+		node.beginStartClock = function(){
+		//INFO: Uses Transitions and their callbacks to ...
+		//string function together in a time delayed fashion.
+			var action0 = function(){
+				var three = node.startClockUI.getChildren("name", "three_sprite")[0];
+				three.visibility = true;
+				//am.addAnim(new Transition(three, "opacity", 0, 1000, "LINEAR", action1));
+				TweenLite.to(three, 1, {opacity:0, ease:Linear.easeNone, onComplete: action1});
+			}
+
+			var action1 = function(){
+				var two = node.startClockUI.getChildren("name", "two_sprite")[0];
+				two.visibility = true;
+				//am.addAnim(new Transition(two, "opacity", 0, 1000, "LINEAR", action2));
+				TweenLite.to(two, 1, {opacity:0, ease:Linear.easeNone, onComplete: action2});
+			}
+
+			var action2 = function(){
+				var one = node.startClockUI.getChildren("name", "one_sprite")[0];
+				one.visibility = true;
+				//am.addAnim(new Transition(one, "opacity", 0, 1000, "LINEAR", action3));
+				TweenLite.to(one, 1, {opacity:0, ease:Linear.easeNone, onComplete: action3});
+			}
+
+			//BEGIN PLAY
+			var action3 = function(){	
+				node.beginPlay();
+			}
+
+			//start the delayed chain reaction
+			//am.addAnim(new Transition(node.startClockUI,"dummy", 100, 500, "LINEAR", action0));
+			TweenLite.delayedCall(1, action0);
+		}
+
+
+		node.buildTimerUI = function(){
+			var card
+			var time_txt;
+			var update;
+
+			card = node.createNode("timerUI_card");
+			asCard(card);
+			card.background.opacity = 0;
+			
+
+				time_text = card.createNode("time_text");
+				asTransform(time_text);
+				time_text.label = node.timePast + "\"";
+				time_text.fontSize = 32;
+				time_text.color = "#bbbbbb"; //med-Gray
+				time_text.showLabel = true;
+				time_text.height = time_text.fontSize;
+
+
+			//set card positions
+			
+			card.showPosY = VIEW_BOTTOM - (time_text.height * .5);;
+			card.showPosX = 0
+			card.hidePosY = VIEW_BOTTOM + (time_text.height * 1.5);
+			card.hidePosX = 0;
+			
+
+			card.posX = card.hidePosX;
+			card.posY = card.hidePosY;
+
+			//update funtions.
+			update = function(){
+				card.getChildren("name", "time_text")[0].label = node.timePast;
+			}
+			card.updateCommandList.push(update);
+
+			return card;
+		}
+
+
+
+
+		
+
+		node.buildRocketManUI = function(){
+			
+			//Build SceneGrp
+			//var world = node.createNode("world_grp");
+			//asTransform(world);
+
+			//Build Pedastal grp
+			var rocketManGrp = node.createNode("rocket_grp");
+			asTransform(rocketManGrp);
+			rocketManGrp.posY = VIEW_Y/4;
+
+			var manParticlesGrp = rocketManGrp.createNode("manParticles_grp")
+			asTransform(manParticlesGrp);
+
+
+			// Build Man Pedastal
+			var manGrp = rocketManGrp.createNode("man_grp");
+			asTransform(manGrp);
+
+			// Build Smoke Emitter and attch to manGrp
+			node.rocketManSmokeUI = node.buildRocketParticleEmitter();
+			node.rocketManSmokeUI.setParent(manGrp);
+			node.rocketManSmokeUI.particle.parent = manParticlesGrp;
+			
+
+			//Build heat field ( raises up smoke )
+			node.heatField = node.createNode("heatField");
+			asForceField(node.heatField);
+			node.rocketManSmokeUI.addForceField(node.heatField);
+			node.heatField.processParticle = function(particle){
+				//console.log("processing particle : %s", particle.name)
+				particle.velY -= .05; 
+			}
+
+			// Build Man Sprite
+			var man = manGrp.createNode("man");
+			asSprite(man);
+			var man_img = AssetManager.addImage("images/man_200x200.png");
+			man.setImage(man_img);
+			man.width = VIEW_Y / 6;
+			man.height = man.width;
+
+			
+
+
+
+			
+
+			return rocketManGrp;
+		}
+
+		node.buildRocketParticleEmitter = function(){
+			
+			var emitter = node.createNode(node.getUniqueName("smokeEmitter"));
+			asParticleEmitter(emitter);
+
+			//set default particle atters.
+			emitter.particle.rotate = randomMinMax(-360,360);
+			emitter.particle.velX =  randomMinMax(-.5,.5);
+			emitter.particle.velY =  randomMinMax(4,2);
+			emitter.particle.velRotate = randomMinMax(-3,3);
+			emitter.particle.opacity = .5;
+			emitter.particle.color = "#555555";
+
+			var img = AssetManager.addImage("images/smoke_256x200.png");
+			emitter.particle.setImage(img);
+
+
+			//Custom particle mapping
+			emitter.particle.updateOverrides = function(){
+				var particle = this;
+				
+				//map Scale with Age.
+				var startAmt =1;
+				var endAmt = 3;
+				particle.scaleX = particle.scaleY = startAmt+(particle.age * endAmt);
+				if(particle.scaleX > 5){
+					particle.scaleX = particle.scaleY = 5;
+				}
+				
+				
+				//map opacity to inverted age.
+				var mult = 20;
+				particle.opacity =(1/1-particle.age)/mult;// /2  ;
+				if(particle.opacity < 0){
+					particle.opacity = 0;
+				}
+			}
+
+			emitter.onEmit = function(){
+				self = this;
+				
+				//set random rotation at emission.
+				self.particle.rotate = randomMinMax(-360,360);
+
+				var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+				node.rocketManSmokeUI.particle.birthPosY = manGrp.posY;
+				node.rocketManSmokeUI.particle.birthPosX = manGrp.posX;
+			}
+
+			return emitter;
+		}
+
+		node.buildRocketManShadowUI = function(){
+			var shadow = node.createNode("man_shadow");
+			asSprite(shadow);
+			
+			var shadow_img = AssetManager.addImage("images/shadow_200x200.png");
+			shadow.setImage(shadow_img);
+
+			shadow.width = VIEW_Y / 6;
+			shadow.height = VIEW_Y / 6;
+			
+
+			return shadow;
+		}
+
+		node.updateRocketManUI = function(){
+			
+			//Shadow GFX
+			//man = node.rocketManUI.getChildren("name","man_grp")[0].getChildren("name","man")[0];
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			shadow = node.getChildren("name", "world_grp")[0].getDecendents("name","man_shadow")[0];
+			
+			shadow.scaleX = (manGrp.posY * -.005) + 1;
+			shadow.scaleY = shadow.scaleX / 4;
+			shadow.opacity = (manGrp.posY * .0055) + 1;
+			shadow.posX = manGrp.posX;
+
+			//clamp shadow values
+			if(shadow.scaleX > 10){
+				shadow.scaleX = 10;
+				shadow.scaleY = shadow.scaleX / 4;
+			}
+			if(shadow.opacity < 0){
+				shadow.opacity = 0;
+			}
+		}
+
+		node.rocketManGrpUI_wabble = function(stop){
+			
+			
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			var rot = randomMinMax(-2, 2);
+			var offsetX = (rot * 1) + manGrp.posX;
+			var time = randomMinMax(.08, .2);
+			TweenLite.to(manGrp,time,{rotate:rot.toString(),posX:offsetX,ease:Linear.easeNone,onComplete:node.rocketManGrpUI_wabble});
+			
+			if(stop){
+				TweenLite.killTweensOf(node.rocketManGrpUI_wabble);
+			}
+		}
+
+		node.rocketManSmokeUI_idle = function(){
+			
+			
+			//ParticleEmitter Smoke
+			node.rocketManSmokeUI.emit(2)
+			delayTime = randomMinMax(0,.2);
+			TweenLite.delayedCall(delayTime,node.rocketManSmokeUI_idle);
+		}
+		
+		
+
+		node.rocketManUI_fall = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+
+			TweenLite.to(manGrp,2,{posY:"0",ease:Power3.easeIn});
+		}
+
+		node.rocketManUI_knockDown = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			var amt = man.posY +200;
+			TweenLite.to(manGrp,1,{posY:amt,ease:Power3.easeInOut, onComplete:node.rocketManUI_floatUp});
+		}
+
+		node.rocketManUI_rise = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			
+			TweenLite.to(manGrp,3,{posY:"-150", ease:Power2.easeOut, onComplete: node.rocketManUI_floatDown});
+		}
+
+		node.rocketManUI_floatUp = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			var floatUp = manGrp.posY - 25;
+			
+			var repeat = function(){
+				node.rocketManUI_floatDown()
+			}
+
+			TweenLite.to(manGrp,2,{posY:floatUp, ease:Power1.easeInOut, onComplete:repeat});
+		}
+
+		node.rocketManUI_blastoff = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			TweenLite.to(manGrp,.5,{posY:-VIEW_Y, ease:Power3.easeIn});
+		}
+
+		node.rocketManUI_floatDown = function(){
+			var manGrp = node.getChildren("name","world_grp")[0].getChildren("name","rocket_grp")[0].getChildren("name","man_grp")[0];
+			var floatDown = manGrp.posY + 25;
+			var repeat = function(){
+				node.rocketManUI_floatUp()
+			}
+
+			TweenLite.to(manGrp,2,{posY:floatDown, ease:Power2.easeInOut, onComplete:repeat});
+		}
+
+		
+		node.buildBgParticles = function(parent){
+			
+			var emitter;
+
+			emitter = parent.createNode("bg_emitter")
+			asParticleEmitter(emitter);
+
+			//emitter.particle.velY =  randomMinMax(6,4);
+			emitter.particle.velY = 30;
+			emitter.particle.color = "#999999";
+			emitter.particle.opacity = .1;
+			emitter.particle.width = 5;
+			emitter.particle.height = VIEW_Y/3;
+
+			emitter.onEmit = function(){
+				self = this;
+
+				self.particle.birthPosX = randomMinMax(VIEW_LEFT, VIEW_RIGHT);
+				self.particle.birthPosY = randomMinMax(VIEW_TOP, VIEW_TOP + (VIEW_Y/3));
+			}
+
+			return emitter;
+		}
+
+		
+
+		node.buildWorld = function(){
+			var world = node.createNode("world_grp");
+			asTransform(world);
+			node.world = world;
+
+			var bgGrp = world.createNode("bg_grp");
+			asTransform(bgGrp)
+
+			var bgGradient = node.buildBgUI();
+			bgGradient.setParent(bgGrp);
+
+			var bgParticles = node.buildBgParticles(bgGrp);
+			//bgParticles.setParent(bgGrp);
+
+			var rocketManGrp = node.buildRocketManUI();
+			rocketManGrp.setParent(world);
+
+			var man = rocketManGrp.getChildren("name","man_grp")[0].getChildren("name","man")[0];
+
+			var rocketManShadow = node.buildRocketManShadowUI();
+			rocketManShadow.setParent(world);
+			rocketManShadow.posY = rocketManGrp.posY + (man.height / 2.25);
+
+			var hintUI = node.buildHintUI();
+			hintUI.setParent(world);
+			node.hintUI = hintUI;
+
+
+			
+
+
+			return world;
+		}
+
+		node.buildLevelUI = function(){
+			
+
+
+			//build in order of Z-Depth
+			node.world = node.buildWorld();
+			node.world.setParent(node);
+			
+			node.overlayUI = node.buildLevelOverlayUI();
+			node.startClockUI = node.buildStartClockUI();
+			node.startClockUI.setParent(node.overlayUI);
+			node.timerUI = node.buildTimerUI();
+			node.timerUI.setParent(node.overlayUI);
+
+			node.winCardUI = node.buildWinCardUI();
+		}
+		//Build Level UI 
+		node.buildLevelUI();
+
+		node.addStage = function(combos){
+			var stage = node.createNode(node.getUniqueName("stage"));
+			asStage(stage);
+			
+			if(combos){
+				if(combos instanceof Array){
+					
+					//Creat combos from specified Behaviors
+					for(var i = 0; i < combos.length ;i++){
+						
+						stage.addCombo(combos[i]);
+					}
+
+
+
+				}else{
+					console.warn("Level:AddStage: argument bust be array")
+				}
+			}else{
+			
+			}
+
+			
+
+			return stage;
+		}
+
+		node.setInputCommands = function(){
+			node.inputCommandList.up = function(){
+				node.advance(CHECKPOINT.MOVE.UP);
+			}
+
+			node.inputCommandList.right = function(){
+				node.advance(CHECKPOINT.MOVE.RIGHT);
+			}
+
+			node.inputCommandList.down = function(){
+				node.advance(CHECKPOINT.MOVE.DOWN);
+			}
+
+			node.inputCommandList.left = function(){
+				node.advance(CHECKPOINT.MOVE.LEFT);
+			}
+		}
+
+
+		node.beginPlay = function(){
+			//start taking input and drop first stage.
+			node.getChildren("asCheckpoint", true)[0].isPaused = false;
+			node.setInputCommands(); //allows input not to count until ready.
+
+			//timer stuff
+			node.timeCount = true;
+			node.timeStart = (new Date).getTime();
+			node.rocketManSmokeUI_idle();
+			node.rocketManGrpUI_wabble();
+			node.rocketManUI_rise();
+			node.timerUI.show();
+			//am.addAnim(new Transition(node.timerUI., "opacity", 0, 1000, "LINEAR", action1)
+
+			//start hint
+			node.delayShowHintUI(2);
+		}
+
+		
+		//Graphic Style
+		node.setDefault = function(){
+			node.type = CHECKPOINT.LEVEL;
+			//value = LVL;
+			node.color = "#eeeeee"
+			node.align.isON = false;
+			node.align.spacing = 0;
+			//node.align.spacingStart = 0; // don't need this for now.
+			//baseBG of lvl;
+			//node.setImage(arrowDownImg);
+			node.width = VIEW_X;
+			node.height = VIEW_Y;
+		}
+		node.setDefault(); // Run on constructor
+
+
+		//Main Level Mechanic:
+		//Traversing through combos and moving to the next one.
+		node.advance = function(player_move){
+			if(!node.isPlayerPaused){
+					if(node.moveIndex < node.moveList.length){
+
+						var correctMove = node.moveList[node.moveIndex].value;
+
+						if(correctMove == player_move){
+							
+							//SET move as complete
+							node.moveList[node.moveIndex].isComplete = true;
+							node.onAdvanceCorrect();
+
+							console.log("level:advance: %s CORRECT!", player_move)
+
+							//CHECK for more moves...
+							node.moveIndex++;
+							if(node.moveList[node.moveIndex]){
+								node.activeMove = node.moveList[node.moveIndex];
+
+								node.onAdvanceNextMove();
+							}
+
+
+
+							return true;
+						}else{
+							console.log("level:advance: %s WRONG!", player_move)
+							node.onAdvanceWrong();
+							return false;
+						}
+					}
+			}
+		}
+
+		node.onAdvanceCorrect = function(){
+			
+			node.hintUI.hide();
+			node.rocketManUI_rise();
+			//node.delayShowHintUI(2000);
+		}
+
+		node.onAdvanceWrong = function(){
+			node.hintUI.show();
+			node.rocketManUI_fall();
+		}
+
+		node.onAdvanceNextMove = function(){
+			node.delayShowHintUI(2);
+		}
+
+		node.onAdvanceStageCombo = function(){
+			//currently Not called at all.
+		}
+
+		node.onAdvanceStage = function(){
+			node.getDecendents("name","bg_emitter")[0].emit(5);
+		}
+
+		node.onComplete = function(){
+			//node.color = "#aaaaaa";
+			node.timeComplete = (new Date).getTime();   //MOVE THIS SHIT SOMEWHER ELSE!
+			node.timerUI.hide();
+			node.rocketManUI_blastoff();
+			node.setWinCardTimeStamp(node.timePast);
+			node.winCardUI.animateIn(); //<--------- THIS SHOULD BE MORE DYNAMIC!!!!
+
+
+			node.inputCommandList.spacebar = function(){
+				//COULD MAKE ALL THIS ANOTHER FUNCTION  --  ex:   node.readyNextlevel()
+				//node.hide();
+				var ggNode = node.getParent("asGameGraph",true);
+				ggNode.activeInputField = ggNode.getChildren("name", "pause_screen")[0];
+				ggNode.getChildren("name", "pause_screen")[0].show();
+			}
+			
+		}
+
+		node.getActiveStage = function(){
+			var activeStage = node.activeMove.getParent("asStage");
+			return activeStage;
+		}
+
+		node.getActiveCombo = function(){
+			var activeCombo = node.getActiveStage().getChildren("isActive", true)[0];
+			return activeCombo;
+		}
+
+		node.getActiveMove = function(){
+			return node.activeMove;
+		}
+
+		node.onActiveMoveComplete = function(){
+
+		}
+
+		node.onActiveComboComplete = function(){
+
+		}
+
+		node.onActiveStageComplete = function(){
+
+		}
+
+		
+		//NOT WORKING YET... first time this updates, theres no nodes to work with.
+		node.updateActiveCheckpoints = function(){
+
+			
+			if(node.getActiveCombo().isComplete){
+				node.onActiveComboComplete();
+			}
+
+			if(node.getActiveStage().isComplete){
+				node.onActiveStageComplete();
+				
+			}
+
+			if(node.getActiveMove().isComplete){
+				node.onActiveMoveComplete();
+			}
+
+		}
+
+		node.updateTimers = function(){
+			if(!node.timeComplete){
+
+				if(node.timeCount){
+					var curTime = (new Date).getTime();
+					var timePastInMilSec = curTime - node.timeStart;
+					var timePastInSec = timePastInMilSec / 1000;
+					var onlyHundredths = node.formatTime(timePastInSec); //EXPRESION KILL PAST THE THOUSANDSTH PLACE
+					
+					//fill in extra missing zeros so the timer doesnt strobe
+					if ((onlyHundredths.toString().length) == 4 && (onlyHundredths.toString()[1] == '.')){
+						onlyHundredths = "0" + onlyHundredths;
+
+					}else if(onlyHundredths.toString().length == 4){
+						onlyHundredths += "0";
+					
+					}else if((onlyHundredths.toString().length) == 5 && (onlyHundredths.toString()[3] == '.')){
+						onlyHundredths += "0";
+					
+					}else if((onlyHundredths.toString().length) == 3 && (onlyHundredths.toString()[1] == '.')){
+						onlyHundredths = "0" + onlyHundredths + "0";
+
+					}else if(onlyHundredths.toString().length == 3){
+						onlyHundredths += "00";
+					}else if(onlyHundredths % 1 == 0){
+						
+						if(onlyHundredths.toString().length == 1){
+							onlyHundredths = "0" + onlyHundredths;
+						}
+
+						onlyHundredths = onlyHundredths + ".00";
+					}
+
+
+					//console.log(onlyHundredths);
+					node.timePast = onlyHundredths;
+				}
+			}
+		}
+
+		node.formatTime = function(t){
+			//only show hundres place
+			return Number(t.toString().match(/^\d+(?:\.\d{0,2})?/)) //EXPRESION KILL PAST THE THOUSANDSTH PLACE
+
+		}
+
+		//TO DO most time stuff should happen in asCheckpoint
+		node.togglePlayerPause = function(){
+			if(node.isPlayerPaused){
+				//FIX Playclock by adding Pause time from startTime
+				node.timePauseEnd = (new Date).getTime();
+				node.timeStart += (node.timePauseEnd - node.timePauseStart);
+
+				//node.lvlNode.isPaused = false;
+				node.isPlayerPaused = false;
+				//node.pauseScreenNode.animateOut();
+
+			}else{
+				node.timePauseStart = (new Date).getTime();
+				//node.lvlNode.isPaused = true;
+				node.isPlayerPaused = true;
+				//node.pauseScreenNode.animateIn();
+			}
+		}
+
+		//overwrite firstUpdate from Node
+		node.onFirstUpdate = function(){
+			
+			node.load();
+
+			//node.timeStart = (new Date).getTime(); //<---- TIME SHIT SHOULD BE IN asCheckpoint behavior
+		}
+
+		node.onShow = function(){
+			//pause first stage;
+			//node.getChildren("asCheckpoint", true)[0].isPaused = true;
+			//start event timeline.
+			node.beginStartClock();
+			
+		}
+
+
+		node.updateAsLevel = function(){
+			//node.updateActiveCheckpoints();
+			node.updateTimers(); // <------- ShOULD BIN IN asCheckpoint behavior.
+			
+			node.updateBgUI();
+			node.updateRocketManUI();
+
+		}
+		node.updateCommandList.push(node.updateAsLevel); //Add to main node.Update function.
+
+		node.load = function(){
+
+
+			//HOOK UP LEVEL LISTS
+			node.moveList = node.getDecendents("type", CHECKPOINT.MOVE);
+			node.activeMove = node.moveList[0];
+
+			//Pause first Stage
+			node.getChildren("asCheckpoint", true)[0].isPaused = true;
+		}
+
+
+
+		
+	}
+
+	//THIS WILL BECOME PARENT NODE THAT IS -- THE ENGINE.
+	asGameGraph = function(node){
+	//INFO: This behavior is intened to be on the TOP-NODE of the Scene Graph.
+		//It is THIS NODE, that will be updated constiantly.
+
+		//CREATE Behavior OBJECT and CREATE POINTER to it's Base Node
+		node.asGameGraph = true;
+			
+		node.assetManager = {
+			images : [],
+			sounds : [],
+			movies : [],
+
+			addImage : function(src){
+				
+				var index = this.images.push(new global.Image);
+
+				var img = this.images[index -1];
+				img.src = src;
+
+				return img;
+
+			},
+		}
+
+
+		node.activeInputField;
+
+
+		node.getAllInputFields = function(){
+			var nodeList = [];
+			nodeList = node.getDecendents("asInputField", true);
+			return nodeList;
+		}
+
+
+		node.initPlayerInput = function(){
+		//MY GHETTO INPUT DEVICES
+			
+			//TOUCH Controls $(JQuery)
+			$("#canvasFG").on("taphold",function(){
+			    //alert("held tap")
+			    node.activeInputField.inputCommandList.spacebar();
+			  });
+
+			$("#canvasFG").on("tap",function(){
+			    //alert("held tap")
+			    node.activeInputField.inputCommandList.spacebar();
+			  });
+
+			$("#canvasFG").on("swipeleft",function(){
+			    //alert("swipe left")
+			    node.activeInputField.inputCommandList.left();
+			  });
+
+			$("#canvasFG").on("swiperight",function(){
+			    //alert("swipe right")
+			    node.activeInputField.inputCommandList.right();
+			  });
+
+			$("#canvasFG").on("swipeup",function(){
+			   // alert("swipe up")
+			   node.activeInputField.inputCommandList.up();
+			  });
+
+			$("#canvasFG").on("swipedown",function(){
+			    //alert("swipe down")
+			    node.activeInputField.inputCommandList.down();
+			  });
+
+			//KEBOARD CONTROL
+			global.addEventListener('keydown', function(event) {
+			  switch (event.keyCode) {
+			    case 37: // Left
+			      //EventManager.register(EVENT.PLAYER_MOVED_LEFT);
+			      node.activeInputField.inputCommandList.left();
+			    break;
+
+			    case 38: // Up
+			      //EventManager.register(EVENT.PLAYER_MOVED_UP);
+			      node.activeInputField.inputCommandList.up();
+
+			    break;
+
+			    case 39: // Right
+			      //EventManager.register(EVENT.PLAYER_MOVED_RIGHT);
+			      node.activeInputField.inputCommandList.right();
+
+			    break;
+
+			    case 40: // Down
+			      //EventManager.register(EVENT.PLAYER_MOVED_DOWN);
+			      node.activeInputField.inputCommandList.down();
+
+			      
+			    break;
+
+			    case 32: // SPACEBAR
+			      //EventManager.register(EVENT.PLAYER_PAUSE);
+			      node.activeInputField.inputCommandList.spacebar();
+
+			      
+			    break;
+			  }
+			}, false);	
+		}
+
+		node.addLevel = function(){
+			var level = node.createNode(node.getUniqueName("level"));
+			asLevel(level);
+			
+			return level;
+		}
+
+		node.onFirstUpdate = function(){
+		//INFO: Create and Init Game Objects Here.
+			
+			console.log("asGameGraph Loading... \"%s\"", node.name);
+			//Init Game Objects Here
+			//node.sssetManager.addImage();
+			
+			//set initial level
+			//if(levelBook)
+
+			
+			/* //The BELOW code overwrites the activeInputField if i've set it previous to onFirstUpdate.
+			//set initial InputField to first found if not set already.
+			node.activeInputField = node.getDecendents("asInputField", true)[0];//[0];
+			if(node.activeInputField == undefined){
+				console.log("asGameGraph:onFirstUpdate: NO activeInputField Loaded");
+			}
+			*/
+			node.initPlayerInput();
+
+			//more here.
+		}
+
+
+		node.drawGameGraph = function(){
+		
+			// Use the identity matrix while clearing the canvas
+			ctx.setTransform(1, 0, 0, 1, (VIEW_X/2),(VIEW_Y/2));
+			ctx.clearRect((-VIEW_X/2),(-VIEW_Y/2),VIEW_X,VIEW_Y);
+			
+			
+		}
+		node.drawCommandList.push(node.drawGameGraph); //Add to Node's draw commands.
+		
+		return node;
+	}//End asGame
+
+
+	//CREATE GameGraph Engine node
+	gg = new Node("gameGraph_1");
+	asGameGraph(gg);
+
+	//ADD ENGINE COMPONENTS
+	//am = new AnimationManager;
+
+
+
+	//********************************    BUILD GAME NODE TREE  ***********************
+	//********************************    BUILD GAME NODE TREE  ***********************
+	//********************************    BUILD GAME NODE TREE  ***********************	
+
+	asCombo_leaf = function(node){
+		
+		//Dependants
+		if(!node.asCombo){
+			asCombo(node);
+			node.asCombo = true;
+		}
+
+		node.asCombo_leaf = true;
+
+
+		//set Defaults.
+		//node.width = 100;
+		//node.height = 100;
+
+		//node.width = VIEW_X / 6;
+		//node.height = node.width;
+
+
+		var img = AssetManager.addImage("images/leaf_200px.png")
+		node.setImage(img);
+
+		node.addMove(asMoveDown);
+	}
+
+	asCombo_bird = function(node){
+		
+		//Dependants
+		if(!node.asCombo){
+			asCombo(node);
+			node.asCombo = true;
+		}
+		
+		//node.width = 150;
+		//node.height = 150;
+		//node.width = VIEW_X / 6;
+		//node.height = node.width;
+
+		var img = AssetManager.addImage("images/bird_200px.png")
+		node.setImage(img);
+
+		node.addMove(asMoveUp);
+	}
+
+	asCombo_tree = function(node){
+		//Dependants
+		if(!node.asCombo){
+			asCombo(node);
+			node.asCombo = true;
+		}
+		
+		//node.width = 150;
+		//node.height = 150;
+		//node.width = VIEW_X / 6;
+		//node.height = node.width;
+
+		var img = AssetManager.addImage("images/tree2_200x200.png")
+		node.setImage(img);
+
+		//node.addMove(asMoveUp);
+		//node.addMove()
+
+		var combo = node.addCombo(asCombo_leaf);
+		combo.visibility = 0;
+
+		var combo2 = node.addCombo(asCombo_leaf);
+		combo2.visibility = 0;
+
+		var combo3 = node.addCombo(asCombo_leaf);
+		combo3.visibility = 0;
+
+		var combo4 = node.addCombo(asCombo_bird);
+		combo4.visibility = 0;
+
+		return node;
+	}
+
+
+
+
+	//BUILD First level
+	// a better way to write this would be...
+	//lvl_01.createStage("stage1").createCombo("combo1").createMove("move1", CHECKLIST.MOVE.UP);
+	/*   OR ...
+	lvl_01.createStage({
+		"stage1",
+		"stage1",
+		"stage3",
+	})
+
+	lvl_01.getStage(0).createCombo({
+		"combo1",
+		"combo2",
+		"combo3",
+	})
+
+	lvl_01.getStage(0).getCombo(0)({
+		{"move1", CHECKPOINT.MOVE.UP},
+		{"move2", CHECKPOINT.MOVE.RIGHT},
+		{"move3", CHECKPOINT.MOVE.DOWN},
+	})
+
+	*/
+
+
+
+
+
+	//StartScreen
+	startScreen = gg.createNode("start_Screen");
+	asScreen(startScreen);
+	startScreen.posX = 0;
+	startScreen.background.opacity = 1;
+
+
+	startScreen.inputCommandList.down = function(){
+		menu_1.selectNextItem();
+	}
+
+	startScreen.inputCommandList.up = function(){
+		menu_1.selectNextItem(-1);
+	}
+
+	startScreen.inputCommandList.spacebar = function(){
+		console.log("spacebar");
+		menu_1.getSelectedItem().action();
+	}
+
+
+
+
+		//Menu system
+			//MENU SYSTEM for StartScreen
+			menu_1 = startScreen.createNode("Menu_1");
+			asMenu(menu_1);
+			asSprite(menu_1);
+			menu_1.width = VIEW_X;
+			menu_1.height = VIEW_Y;
+			menu_1.opacity = .8;
+			menu_1.color = "#666666";
+			menu_1.align.spacingX = 0;
+			menu_1.align.spacingY = 150;
+			menu_1.align.spacingStart = 0;
+
+
+					menuItem_1 = menu_1.createNode("Item_1");
+					asMenuItem(menuItem_1);
+					asSprite(menuItem_1);
+					menuItem_1.width = MENU_ITEM_SIZE_X;
+					menuItem_1.height = MENU_ITEM_SIZE_Y;
+					
+					menuItem_1.color ="#cccccc";
+					menuItem_1.align.isON = true;
+					menuItem_1.onSelect = function(){
+						this.color = "#eeeeee"
+						this.scaleX = 1;
+						this.scaleY = 1;
+					}
+					menuItem_1.onDeselect = function(){
+						this.color = "#cccccc";
+						this.scaleX = 1;
+						this.scaleY = 1;
+					}
+					menuItem_1.action = function(){
+						this.scaleX = 1.1;
+						this.scaleY = 1.1;
+						
+						startScreen.hide();
+						gg.activeInputField = lvl_01; //<-- MAKE DYNAMIC
+						lvl_01.show();
+
+
+					}
+
+					label_start = menuItem_1.createNode("label_start");
+					asTransform(label_start);
+					label_start.label = "START";
+					label_start.showLabel = true;
+					label_start.fontSize = 48;
+					//label_start.posX = -1.5 * 48;
+				
+
+					menuItem_2 = menu_1.createNode("Item_2");
+					asMenuItem(menuItem_2);
+					asSprite(menuItem_2);
+					menuItem_2.width = MENU_ITEM_SIZE_X;
+					menuItem_2.height = MENU_ITEM_SIZE_Y;
+					
+					menuItem_2.color ="#cccccc";
+					menuItem_2.align.isON = true;
+					menuItem_2.onSelect = function(){
+						this.color = "#eeeeee"
+						this.scaleX = 1;
+						this.scaleY = 1;
+					}
+					menuItem_2.onDeselect = function(){
+						this.color = "#cccccc";
+						this.scaleX = 1;
+						this.scaleY = 1;
+					}
+					menuItem_2.action = function(){
+						this.scaleX = 1.1;
+						this.scaleY = 1.1;
+					}
+
+					label_options = menuItem_2.createNode("label_options");
+					asTransform(label_options);
+					label_options.label = "OPTIONS";
+					label_options.showLabel = true;
+					label_options.fontSize = 48;
+					//label_options.posX = -2.5 * 48;
+					
+			
+
+		/*
+		//TEST CONTAINER
+		cell_0 = startScreen.createNode("cell_0");
+		asCell(cell_0);
+		cell_0.numChildCells = 3;
+
+
+					cell_1 = cell_0.createNode("cell_1");
+					asSprite(cell_1);
+					asCell(cell_1);
+					cell_1.color = "#ff0000";
+
+					cell_2 = cell_0.createNode("cell_2");
+					asSprite(cell_2);
+					asCell(cell_2);
+					cell_2.color = "#00ff00";
+
+					cell_3 = cell_0.createNode("cell_3");
+					asSprite(cell_3);
+					asCell(cell_3);
+					cell_3.color = "#0000ff";
+
+		*/
+
+
+
+	//Pause Screen
+	pauseScreen = gg.createNode("pause_screen");
+	asScreen(pauseScreen);
+	pauseScreen.posX = -VIEW_X;
+	pauseScreen.background.opacity = .5;
+		
+	pauseScreen.inputCommandList.spacebar = function(){
+		//pauseScreen.hide();
+		//ACTIVE_LEVEL.togglePlayerPause();
+	}
+
+			pauseText = pauseScreen.createNode("pause_text");
+			asTransform(pauseText);
+			pauseText.label = "Pause"
+			pauseText.showLabel = true;
+			pauseText.fontSize = 64;
+			pauseText.color = "#ffffff";
+			pauseText.posX = -100;
+				
+
+
+	lvl_01 = gg.addLevel();
+
+	lvl_01.addStage([asCombo_leaf]);
+	lvl_01.addStage([asCombo_leaf, asCombo_leaf]);
+	lvl_01.addStage([asCombo_leaf, asCombo_leaf, asCombo_leaf]);
+	lvl_01.addStage([asCombo_bird]);
+	lvl_01.addStage([asCombo_leaf,asCombo_leaf,asCombo_bird]);
+	lvl_01.addStage([asCombo_bird,asCombo_leaf,asCombo_bird]);
+	lvl_01.addStage([asCombo_leaf,asCombo_bird,asCombo_leaf,asCombo_bird]);
+	lvl_01.addStage([asCombo_bird,asCombo_leaf,asCombo_bird,asCombo_leaf]);
+
+	lvl_01.addStage([asCombo_tree]);
+
+	//now a tree!!!
+
+	
+
+
+	startScreen.setParent(gg);
+	gg.activeInputField = startScreen;
+	//startScreen.show();
+
+
+
+
+
+
+
+	//--------------------------------------------------------------------
+	//--------------------------------------------------------------------
+
+
+
+	//RequestAnimationFrame for efficent rendering.
+	var intervalID = -1;
+	var QueueNewFrame = function () {
+	    if (window.requestAnimationFrame)
+	        window.requestAnimationFrame(renderingLoop);
+	    else if (window.msRequestAnimationFrame)
+	        window.msRequestAnimationFrame(renderingLoop);
+	    else if (window.webkitRequestAnimationFrame)
+	        window.webkitRequestAnimationFrame(renderingLoop);
+	    else if (window.mozRequestAnimationFrame)
+	        window.mozRequestAnimationFrame(renderingLoop);
+	    else if (window.oRequestAnimationFrame)
+	        window.oRequestAnimationFrame(renderingLoop);
+	    else {
+	        QueueNewFrame = function () {
+	        };
+	        intervalID = window.setInterval(renderingLoop, 16.7);
+	    }
+	};
+
+	
+
+
+
+
+	//LOOP MECHANISM
+	game = function(){
+		var intervalId;
+	};
+
+
+	game.update = function(){
+		gg.update()
+		EventManager.update();
+		//am.update() //AnimationManager
+	};
+
+	game.draw = function(){
+		gg.draw();
+		//QueueNewFrame();
+	};
+
+	var renderingLoop = function () {
+		game.update();
+		game.draw();
+		QueueNewFrame();
+	};
+
+	renderingLoop();
+
+/*
+	// MAIN GAME LOOP
+	game.run = (function(){
+		
+		var loops = 0;
+		var skipTicks = 1000 / 60;
+		var maxFrameSkip = 10;
+		var nextGameTick = (new Date).getTime();
+		
+		return function(){
+	    	loops = 0;
+	    
+	    	while ((new Date).getTime() > nextGameTick && loops < maxFrameSkip) {
+	      		game.update();
+	      		nextGameTick += skipTicks;
+	      		loops++;
+	    	};
+	    
+	    	game.draw();
+			
+		};
+	})();
+
+	game.intervalId = window.setInterval(game.run, 0);
+
+*/
+})(window); //END ROCKETGAME
+
+

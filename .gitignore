@@ -1,0 +1,11 @@
+testBuild/
+Temp/
+Library/
+ProjectSettings/
+blastoff_ios/
+.DS_Store
+testIos/
+Assembly-*
+BlastOff-csharp.sln
+BlastOff.sln
+BlastOff.userprefs
